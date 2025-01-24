@@ -38,6 +38,18 @@ CONFIG_MAP_DATA_FIELDS = [
 	'History Full',
 	'History First',
 	'History Last',
+	'Explode Grid',
+	'Question Type',
+	'Question Role',
+	'Question L2',
+	'Category Names L2',
+	'Category Labels L2',
+	'Question L1',
+	'Category Names L1',
+	'Category Labels L1',
+	'Question L0',
+	'Category Names L0',
+	'Category Labels L0',
 ]
 
 
@@ -310,7 +322,8 @@ def find_final_short_name(variable_record,variable_records):
     is_bad_name = False
     is_bad_name = is_bad_name or not field_prop_shortname
     is_bad_name = is_bad_name or check_if_improper_name(field_prop_shortname)
-    is_bad_name = is_bad_name or field_prop_shortname in [ (f['properties']['ShortName'] if 'ShortName' in f['properties'] else '') for _,f in variable_records.items() if not (variable_record['name']==f['name']) ]
+    already_used = field_prop_shortname in [ (f['properties']['ShortName'] if 'ShortName' in f['properties'] else '') for _,f in variable_records.items() if not (variable_record['name']==f['name']) ]
+    is_bad_name = is_bad_name or already_used
 
     if is_bad_name:
         if not parent_path:
@@ -332,13 +345,23 @@ def process_row(map_data,variable_record,variable_records):
     result_field_label = None
     result_field_format = None
     result_field_markup = None
+    result_field_comment = None
 
-    if not ( ('SavRemove' in variable_record['properties']) and ('true' in sanitize_item_name(variable_record['properties']['SavRemove'])) ):
+    skip = False
+    if ('SavRemove' in variable_record['properties']) and ('true' in sanitize_item_name(variable_record['properties']['SavRemove'])):
+        skip = True
+        result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'skip - SavRemove=true'
+
+    if not skip:
 
         # detect variable type
         field_type = detect_field_type(variable_record)
 
-        if not(field_type=='loop' or field_type=='block'):
+        if field_type=='loop' or field_type=='block':
+            skip = True
+            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'skip - loop of block - definitions should be only applied to its fields'
+        
+        if not skip:
 
             # indicates if it's iterative
             field_number_of_iter_levels = get_number_of_iter_levels_recursive(variable_record,variable_records)
@@ -346,28 +369,49 @@ def process_row(map_data,variable_record,variable_records):
             # find if it has shortname
             item_has_shortname = not not get_recursive_prop_shortname(variable_record,variable_records)
 
+            should_include = False
             if item_has_shortname:
-                result_field_include = 'x'
+                should_include = True
+            else:
+                result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'skip - ShortName property not found'
             
-            if result_field_include:
+            if should_include:
+
                 # assert not should_exclude_field(variable_record) # BannerCopyRight has a short name but it can't be represented in SPSS - this check fails but we need to continue
+                
+                result_field_include = 'x' if should_include else None
 
+                levels_count = 0
                 result_field_name = find_final_short_name(variable_record,variable_records)
-                for i in field_number_of_iter_levels:
-                    result_field_name = result_field_name + '_[L{d}z3]'.format(d=i)
+                for d in field_number_of_iter_levels:
+                    result_field_name = result_field_name + '_[L{d}z3]'.format(d=d)
+                    levels_count = levels_count + 1
+                    if d<=2:
+                        if not(map_data['Question L{d}'.format(d=d)]):
+                            # raise Exception('levels check was not passes, detected {a} when iterating in mdd but int the map it\'s {b}'.format(a=levels_count,b=map_data['Level']))
+                            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'ALERT: levels check mismatch ({a} in mdd, {b} in the map)'.format(a=levels_count,b=map_data['Level'])
 
+                levels_count = 0
                 result_field_label = variable_record['label']
                 if 0 in field_number_of_iter_levels:
-                    result_field_label = result_field_label + ' - {{L{d}}}'.format(d=0)
-                for i in [m for m in field_number_of_iter_levels if m!=0]:
-                    result_field_label = '{{L{d}}}: '.format(d=i) + result_field_label
+                    d = 0
+                    result_field_label = result_field_label + ' - {{L{d}}}'.format(d=d)
+                    levels_count = levels_count + 1
+                    if d<=2:
+                        if not(map_data['Question L{d}'.format(d=0)]):
+                            # raise Exception('levels check was not passes, detected {a} when iterating in mdd but int the map it\'s {b}'.format(a=levels_count,b=map_data['Level']))
+                            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'ALERT: levels check mismatch ({a} in mdd, {b} in the map)'.format(a=levels_count,b=map_data['Level'])
+                for d in [m for m in field_number_of_iter_levels if m!=0]:
+                    result_field_label = '{{L{d}}}: '.format(d=d) + result_field_label
+                    levels_count = levels_count + 1
+                    if d<=2:
+                        if not(map_data['Question L{d}'.format(d=d)]):
+                            # raise Exception('levels check was not passes, detected {a} when iterating in mdd but int the map it\'s {b}'.format(a=levels_count,b=map_data['Level']))
+                            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'ALERT: levels check mismatch ({a} in mdd, {b} in the map)'.format(a=levels_count,b=map_data['Level'])
 
-    if result_field_name:
-        print('including')
-    else:
-        print('excluding')
     assert (not not result_field_name)==(not not result_field_include)
     return {
+        'comment': result_field_comment,
         'include': result_field_include,
         'exclude': result_field_exclude,
         'name': result_field_name,
@@ -380,8 +424,9 @@ def process_row(map_data,variable_record,variable_records):
 
 
 def fill(map_df,mdd_scheme):
-    print("Filling the map...")
+    print("Working on the map...")
     
+    print("Normalizing property format from MDD read...")
     mdd_data_records = get_mdd_data_records_from_input_data(mdd_scheme)
     # mdd_data_root = [ field for field in mdd_data_records if field['name']=='' ][0]
     mdd_data_questions = [ field for field in mdd_data_records if detect_item_type_from_mdddata_fields_report(field['name'])=='variable' ]
@@ -402,56 +447,70 @@ def fill(map_df,mdd_scheme):
         if field_prop_savremove:
             variable_record['properties']['SavRemove'] = field_prop_savremove
 
+    print("Normalizing property format from MDD read...")
+    
+    rows = map_df.index
+    print('variables sheet, filling the map...')
     known_system_fields_with_name_clean = {}
     for record_name, record_contents in CONFIG_KNOWN_SYSTEM_FIELDS.items():
         record_name_clean = sanitize_item_name(trim_dots(record_name))
         known_system_fields_with_name_clean[record_name_clean] = record_contents
-    
-    rows = map_df.index
-    print('   starting working on variables sheet...')
-    print('   iterating over rows...')
+    print('iterating over rows...')
     for row in rows:
         variable_name = map_df.loc[row,'Variable']
         processing_last_item = variable_name
         print('processing {s}...'.format(s=processing_last_item))
         try:
+            map_result = {}
             variable_mdd_scheme_name = sanitize_map_name_to_mdd_scheme_name(trim_dots(variable_name))
             variable_mdd_scheme_name_clean = sanitize_item_name(variable_mdd_scheme_name)
 
-            map_result = None
             if variable_mdd_scheme_name_clean in known_system_fields_with_name_clean:
-                print('found as a default variable')
+                map_result['comment'] = (map_result['comment']+'; ' if 'comment' in map_result else '') + 'found a pre-defined item in hardcoded map with system variables'
                 map_result = known_system_fields_with_name_clean[variable_mdd_scheme_name_clean]
             else:
                 map_data = {}
                 for attr in CONFIG_MAP_DATA_FIELDS:
                     map_data[attr] = map_df.loc[row,attr]
                 need_skip = False
-                need_skip = need_skip or 'info' in sanitize_item_name(map_data['Type'])
-                need_skip = need_skip or 'historic' in sanitize_item_name(map_data['Row Type'])
+                if 'info' in sanitize_item_name(map_data['Type']):
+                    need_skip = True
+                    map_result['comment'] = (map_result['comment']+'; ' if 'comment' in map_result else '') + 'skipping - not a variable (info node)'
+                if 'historic' in sanitize_item_name(map_data['Row Type']):
+                    need_skip = True
+                    map_result['comment'] = (map_result['comment']+'; ' if 'comment' in map_result else '') + 'skipping - non-existen variable (it\'s historic record in the map)'
 
                 if not need_skip:
                     variable_record = variable_records[variable_mdd_scheme_name_clean]
                     map_result = process_row(map_data,variable_record,variable_records)
                 else:
-                    print('skip')
+                    map_result['comment'] = (map_result['comment']+' -> ' if 'comment' in map_result else '') + 'skipping!'
 
             # apply result
             if map_result:
-                columns_last_6 = ['{m}'.format(m=m) for m in map_df.columns[-6:]]
-                assert len(columns_last_6)==6
-                assert '- include' in columns_last_6[0]
-                assert '- exclude' in columns_last_6[1]
-                assert '- name' in columns_last_6[2]
-                assert '- label' in columns_last_6[3]
-                assert '- format' in columns_last_6[4]
-                assert '- markup' in columns_last_6[5]
-                map_df.loc[row,columns_last_6[0]] = map_result['include']
-                map_df.loc[row,columns_last_6[1]] = map_result['exclude']
-                map_df.loc[row,columns_last_6[2]] = map_result['name']
-                map_df.loc[row,columns_last_6[3]] = map_result['label']
-                map_df.loc[row,columns_last_6[4]] = map_result['format']
-                map_df.loc[row,columns_last_6[5]] = map_result['markup']
+                columns_last_7 = ['{m}'.format(m=m) for m in map_df.columns[-7:]]
+                assert len(columns_last_7)==7
+                assert '>>>' in columns_last_7[0]
+                assert '- include' in columns_last_7[1]
+                assert '- exclude' in columns_last_7[2]
+                assert '- name' in columns_last_7[3]
+                assert '- label' in columns_last_7[4]
+                assert '- format' in columns_last_7[5]
+                assert '- markup' in columns_last_7[6]
+                if 'include' in map_result:
+                    map_df.loc[row,columns_last_7[1]] = map_result['include']
+                if 'exclude' in map_result:
+                    map_df.loc[row,columns_last_7[2]] = map_result['exclude']
+                if 'name' in map_result:
+                    map_df.loc[row,columns_last_7[3]] = map_result['name']
+                if 'label' in map_result:
+                    map_df.loc[row,columns_last_7[4]] = map_result['label']
+                if 'format' in map_result:
+                    map_df.loc[row,columns_last_7[5]] = map_result['format']
+                if 'markup' in map_result:
+                    map_df.loc[row,columns_last_7[6]] = map_result['markup']
+                if 'comment' in map_result and map_result['comment']:
+                    map_df.loc[row,columns_last_7[0]] = '>>>>>>>>' + ' ' + map_result['comment']
 
         except Exception as e:
             # something failed? alert which was the last row, and throw the exception back
@@ -459,7 +518,7 @@ def fill(map_df,mdd_scheme):
             raise e
 
 
-    print("\nFilling finished")
+    print("Finished!")
     return map_df
 
 
