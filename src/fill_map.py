@@ -170,30 +170,6 @@ def prepare_variable_records(mdd_data_records,mdd_data_categories):
 
     return variable_records
 
-def detect_var_type_by_record(variable_record):
-    variable_attributes_captured_with_mdd_read = {}
-    if not 'attributes' in variable_record:
-        raise ValueError('Input data does not include "attributes" data, please adjust settings that you use to run mdd_read')
-    else:
-        assert isinstance(variable_record,dict)
-    variable_attributes_captured_with_mdd_read = {**variable_record['attributes']}
-    if not 'type' in variable_attributes_captured_with_mdd_read:
-        raise ValueError('Input data must follow certain format and must include "type" within its list of attributes generated with mdd_read')
-
-    # detect variable type - we are doing it from grabbing data from attributes that were written by mdd_read
-    variable_type = None
-    # variable_is_plain = re.match(r'^\s*?plain\b',variable_attributes_captured_with_mdd_read['type'])
-    variable_is_categorical = re.match(r'^\s*?plain/(?:categorical|multipunch|singlepunch)',variable_attributes_captured_with_mdd_read['type'])
-    variable_is_loop = re.match(r'^\s*?(?:array|grid|loop)\b',variable_attributes_captured_with_mdd_read['type'])
-    # variable_is_block = re.match(r'^\s*?(?:block)\b',variable_attributes_captured_with_mdd_read['type'])
-    if variable_is_loop:
-        variable_type = 'loop'
-    elif variable_is_categorical:
-        variable_type = 'categorical'
-    else:
-        raise ValueError('Can\'t handle this type of variable: {s}'.format(s=variable_attributes_captured_with_mdd_read['type']))
-    return variable_type
-
 def should_exclude_field(variable_record):
     field_exclude = False
     if (variable_record['attributes']['data_type'] if variable_record['attributes']['object_type_value']=='0' else '4') == '0': # info item, skip, 4 = "object"
@@ -254,51 +230,13 @@ def find_final_complex_name(field_prop_shortname,variable_record,variable_record
 
 
 
-def get_number_of_iter_levels_recursive(variable_record,variable_records):
-    def recursive(variable_record,variable_records):
-        result_this_field = None
-        field_type = detect_field_type(variable_record)
-        if field_type=='plain' or field_type=='single-punch':
-            result_this_field = 0
-        elif field_type=='multi-punch':
-            result_this_field = 0
-        elif field_type=='block':
-            result_this_field = 0
-        elif field_type=='loop':
-            result_this_field = 1
-        else:
-            raise ValueError('unrecognized field type: {t}'.format(t=field_type))
-        result_parent = None
-        parent_path, _ = extract_field_name(variable_record['name'])
-        if parent_path:
-            result_parent = recursive(variable_records[sanitize_item_name(parent_path)],variable_records)
-        if not result_parent:
-            result_parent = 0
-        result = result_parent + result_this_field
-        assert( isinstance(result,int) )
-        return result
-    result_this_field = None
-    field_type = detect_field_type(variable_record)
-    if field_type=='plain' or field_type=='single-punch':
-        result_this_field = []
-    elif field_type=='multi-punch':
-        result_this_field = [0]
-    elif field_type=='block':
-        result_this_field = []
-    elif field_type=='loop':
-        # result_this_field = 1
-        raise Exception('reached unreachable, please check')
-    else:
-        raise ValueError('unrecognized field type: {t}'.format(t=field_type))
-    result_parent = None
+def get_levels(variable_record,variable_records,is_last=True):
+    this_levels = [variable_record['level']] if 'level' in variable_record and variable_record['level'] is not None else []
+    if not is_last and 'level' in variable_record and variable_record['level']==0:
+        this_levels = []
     parent_path, _ = extract_field_name(variable_record['name'])
-    if parent_path:
-        result_parent = recursive(variable_records[sanitize_item_name(parent_path)],variable_records)
-    if not result_parent:
-        result_parent = 0
-    assert( isinstance(result_parent,int) )
-    result = result_this_field + [m for m in range(result_parent,1-1,-1)]
-    return result
+    parent_levels = get_levels(variable_records[sanitize_item_name(parent_path)],variable_records,is_last=False) if parent_path else []
+    return this_levels + parent_levels
 
 
 
@@ -364,7 +302,7 @@ def process_row(map_data,variable_record,variable_records):
         if not skip:
 
             # indicates if it's iterative
-            field_number_of_iter_levels = get_number_of_iter_levels_recursive(variable_record,variable_records)
+            field_levels = get_levels(variable_record,variable_records)
 
             # find if it has shortname
             item_has_shortname = not not get_recursive_prop_shortname(variable_record,variable_records)
@@ -383,31 +321,31 @@ def process_row(map_data,variable_record,variable_records):
 
                 levels_count = 0
                 result_field_name = find_final_short_name(variable_record,variable_records)
-                for d in field_number_of_iter_levels:
+                for d in field_levels:
                     result_field_name = result_field_name + '_[L{d}z3]'.format(d=d)
                     levels_count = levels_count + 1
                     if d<=2:
                         if not(map_data['Question L{d}'.format(d=d)]):
                             # raise Exception('levels check was not passes, detected {a} when iterating in mdd but int the map it\'s {b}'.format(a=levels_count,b=map_data['Level']))
-                            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'ALERT: levels check mismatch ({a} in mdd, {b} in the map)'.format(a=levels_count,b=map_data['Level'])
+                            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'ALERT: levels check mismatch, adding level L{d} but the column Question L{d} is blank ({q})'.format(d=d,q=map_data['Question L{d}'.format(d=d)])
 
                 levels_count = 0
                 result_field_label = variable_record['label']
-                if 0 in field_number_of_iter_levels:
+                if 0 in field_levels:
                     d = 0
                     result_field_label = result_field_label + ' - {{L{d}}}'.format(d=d)
                     levels_count = levels_count + 1
                     if d<=2:
                         if not(map_data['Question L{d}'.format(d=0)]):
                             # raise Exception('levels check was not passes, detected {a} when iterating in mdd but int the map it\'s {b}'.format(a=levels_count,b=map_data['Level']))
-                            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'ALERT: levels check mismatch ({a} in mdd, {b} in the map)'.format(a=levels_count,b=map_data['Level'])
-                for d in [m for m in field_number_of_iter_levels if m!=0]:
+                            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'ALERT: levels check mismatch, adding level L{d} but the column Question L{d} is blank ({q})'.format(d=d,q=map_data['Question L{d}'.format(d=d)])
+                for d in [m for m in field_levels if m!=0]:
                     result_field_label = '{{L{d}}}: '.format(d=d) + result_field_label
                     levels_count = levels_count + 1
                     if d<=2:
                         if not(map_data['Question L{d}'.format(d=d)]):
                             # raise Exception('levels check was not passes, detected {a} when iterating in mdd but int the map it\'s {b}'.format(a=levels_count,b=map_data['Level']))
-                            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'ALERT: levels check mismatch ({a} in mdd, {b} in the map)'.format(a=levels_count,b=map_data['Level'])
+                            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'ALERT: levels check mismatch, adding level L{d} but the column Question L{d} is blank ({q})'.format(d=d,q=map_data['Question L{d}'.format(d=d)])
 
     assert (not not result_field_name)==(not not result_field_include)
     return {
@@ -428,7 +366,7 @@ def fill(map_df,mdd_scheme):
     
     print("Normalizing property format from MDD read...")
     mdd_data_records = get_mdd_data_records_from_input_data(mdd_scheme)
-    # mdd_data_root = [ field for field in mdd_data_records if field['name']=='' ][0]
+    mdd_data_root = [ field for field in mdd_data_records if field['name']=='' ][0]
     mdd_data_questions = [ field for field in mdd_data_records if detect_item_type_from_mdddata_fields_report(field['name'])=='variable' ]
     mdd_data_categories = [ cat for cat in mdd_data_records if detect_item_type_from_mdddata_fields_report(cat['name'])=='category' ]
     variable_records = prepare_variable_records(mdd_data_questions,mdd_data_categories)
@@ -447,8 +385,50 @@ def fill(map_df,mdd_scheme):
         if field_prop_savremove:
             variable_record['properties']['SavRemove'] = field_prop_savremove
 
-    print("Normalizing property format from MDD read...")
-    
+    print("Detecting levels for every variable...")
+    for _, variable_record in variable_records.items():
+        type = detect_field_type(variable_record)
+        level = None
+        if type=='loop':
+            level = 1
+        elif type=='block' or type=='plain' or type=='single-punch':
+            level = None
+        elif type=='multi-punch':
+            level = 0
+        else:
+            raise ValueError('unrecognized variable type: {o}'.format(o=type))
+        variable_record['level'] = level
+        parent_path, field_name = extract_field_name(variable_record['name'])
+        parent = None
+        if parent_path:
+            parent = variable_records[sanitize_item_name(parent_path)]
+        else:
+            parent = mdd_data_root
+        if not 'fields' in parent:
+            parent['fields'] = []
+        parent['fields'].append(variable_record)
+    def update(node):
+        if not 'fields' in node:
+            return
+        level_max = None
+        for child in node['fields']:
+            update(child)
+            if 'level' in child and child['level'] is not None:
+                if level_max is None or child['level']>level_max:
+                    level_max = child['level']
+            elif 'level_reached' in child:
+                if level_max is None or child['level_reached']>level_max:
+                    level_max = child['level_reached']
+        if 'level' in node:
+            level_add = node['level']
+            if node['level'] is not None:
+                node['level'] = (level_max if level_max is not None else 0) + level_add
+            node['level_reached'] = (level_max if level_max is not None else 0) + (level_add if level_add is not None else 0)
+        else:
+            node['level_reached'] = level_max
+        
+    update(mdd_data_root)
+ 
     rows = map_df.index
     print('variables sheet, filling the map...')
     known_system_fields_with_name_clean = {}
