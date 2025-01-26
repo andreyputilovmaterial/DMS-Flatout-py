@@ -3,9 +3,9 @@ SETLOCAL enabledelayedexpansion
 
 
 @REM :: insert your files here
-SET "MAP_FILE=..\tests\v0.001\mdd_map_R2401582.xlsx"
+SET "MAP_FILE=..\path\to\mdd_map_R2401582.xlsx"
 
-SET "MDD_FILE=..\tests\v0.001\R2401582.mdd"
+SET "MDD_FILE=..\path\to\R2401582.mdd"
 
 
 

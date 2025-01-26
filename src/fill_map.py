@@ -8,19 +8,19 @@ import pandas as pd
 
 
 
-# if __name__ == '__main__':
-#     # run as a program
-#     import util_smth
-# elif '.' in __name__:
-#     # package
-#     from . import util_smth
-# else:
-#     # included with no parent package
-#     import util_smth
+if __name__ == '__main__':
+    # run as a program
+    import helper_utility_performancemonitor
+elif '.' in __name__:
+    # package
+    from . import helper_utility_performancemonitor
+else:
+    # included with no parent package
+    import helper_utility_performancemonitor
 
 
 
-CONFIG_MAP_DATA_FIELDS = [
+CONFIG_MAP_DATA_VARIABLE_FIELDS = [
 	'Variable',
 	'Row Type',
 	'Level',
@@ -50,6 +50,17 @@ CONFIG_MAP_DATA_FIELDS = [
 	'Question L0',
 	'Category Names L0',
 	'Category Labels L0',
+]
+
+CONFIG_MAP_DATA_CATEGORY_FIELDS = [
+	'Variable',
+	'Category',
+	'Offset',
+	'Type',
+	'Label',
+	'Label Length',
+	'Attributes',
+	'Properties',
 ]
 
 
@@ -276,7 +287,7 @@ def find_final_short_name(variable_record,variable_records):
         return field_prop_shortname
 
 
-def process_row(map_data,variable_record,variable_records):
+def process_row_variable(map_data,variable_record,variable_records):
     result_field_include = None
     result_field_exclude = None
     result_field_name = None
@@ -360,9 +371,16 @@ def process_row(map_data,variable_record,variable_records):
 
 
 
+def process_row_category(map_data,category_record,variable_records):
+    analysis_value = category_record['properties']['Value']
+    return {
+        'punch': analysis_value,
+    }
 
-def fill(map_df,mdd_scheme):
-    print("Working on the map...")
+
+
+def fill_variables(map_df,mdd_scheme):
+    print("Working on the map: variables...")
     
     print("Normalizing property format from MDD read...")
     mdd_data_records = get_mdd_data_records_from_input_data(mdd_scheme)
@@ -436,47 +454,64 @@ def fill(map_df,mdd_scheme):
         record_name_clean = sanitize_item_name(trim_dots(record_name))
         known_system_fields_with_name_clean[record_name_clean] = record_contents
     print('iterating over rows...')
+    performance_counter = iter(helper_utility_performancemonitor.PerformanceMonitor(config={
+        'total_records': len(rows),
+        'report_frequency_records_count': 1,
+        'report_frequency_timeinterval': 9,
+        'report_text_pipein': 'filling up variables map',
+    }))
     for row in rows:
         variable_name = map_df.loc[row,'Variable']
         processing_last_item = variable_name
         print('processing {s}...'.format(s=processing_last_item))
+        next(performance_counter)
         try:
             map_result = {}
-            variable_mdd_scheme_name = sanitize_map_name_to_mdd_scheme_name(trim_dots(variable_name))
-            variable_mdd_scheme_name_clean = sanitize_item_name(variable_mdd_scheme_name)
+            try:
+                variable_mdd_scheme_name = sanitize_map_name_to_mdd_scheme_name(trim_dots(variable_name))
+                variable_mdd_scheme_name_clean = sanitize_item_name(variable_mdd_scheme_name)
 
-            if variable_mdd_scheme_name_clean in known_system_fields_with_name_clean:
-                map_result['comment'] = (map_result['comment']+'; ' if 'comment' in map_result else '') + 'found a pre-defined item in hardcoded map with system variables'
-                map_result = known_system_fields_with_name_clean[variable_mdd_scheme_name_clean]
-            else:
-                map_data = {}
-                for attr in CONFIG_MAP_DATA_FIELDS:
-                    map_data[attr] = map_df.loc[row,attr]
-                need_skip = False
-                if 'info' in sanitize_item_name(map_data['Type']):
-                    need_skip = True
-                    map_result['comment'] = (map_result['comment']+'; ' if 'comment' in map_result else '') + 'skipping - not a variable (info node)'
-                if 'historic' in sanitize_item_name(map_data['Row Type']):
-                    need_skip = True
-                    map_result['comment'] = (map_result['comment']+'; ' if 'comment' in map_result else '') + 'skipping - non-existen variable (it\'s historic record in the map)'
-
-                if not need_skip:
-                    variable_record = variable_records[variable_mdd_scheme_name_clean]
-                    map_result = process_row(map_data,variable_record,variable_records)
+                if variable_mdd_scheme_name_clean in known_system_fields_with_name_clean:
+                    map_result['comment'] = (map_result['comment']+'; ' if 'comment' in map_result else '') + 'found a pre-defined item in hardcoded map with system variables'
+                    map_result = known_system_fields_with_name_clean[variable_mdd_scheme_name_clean]
                 else:
-                    map_result['comment'] = (map_result['comment']+' -> ' if 'comment' in map_result else '') + 'skipping!'
+                    map_data = {}
+                    for attr in CONFIG_MAP_DATA_VARIABLE_FIELDS:
+                        map_data[attr] = map_df.loc[row,attr]
+                    need_skip = False
+                    if 'info' in sanitize_item_name(map_data['Type']):
+                        need_skip = True
+                        map_result['comment'] = (map_result['comment']+'; ' if 'comment' in map_result else '') + 'skipping - not a variable (info node)'
+                    if 'historic' in sanitize_item_name(map_data['Row Type']):
+                        need_skip = True
+                        map_result['comment'] = (map_result['comment']+'; ' if 'comment' in map_result else '') + 'skipping - non-existen variable (it\'s historic record in the map)'
+
+                    if not need_skip:
+                        variable_record = variable_records[variable_mdd_scheme_name_clean]
+                        map_result = process_row_variable(map_data,variable_record,variable_records)
+                    else:
+                        map_result['comment'] = (map_result['comment']+' -> ' if 'comment' in map_result else '') + 'skipping!'
+
+            except Exception as e:
+                map_result = {
+                    'comment': '{e}'.format(e=e)
+                }
+                print(e)
 
             # apply result
             if map_result:
                 columns_last_7 = ['{m}'.format(m=m) for m in map_df.columns[-7:]]
-                assert len(columns_last_7)==7
-                assert '>>>' in columns_last_7[0]
-                assert '- include' in columns_last_7[1]
-                assert '- exclude' in columns_last_7[2]
-                assert '- name' in columns_last_7[3]
-                assert '- label' in columns_last_7[4]
-                assert '- format' in columns_last_7[5]
-                assert '- markup' in columns_last_7[6]
+                try:
+                    assert len(columns_last_7)==7
+                    assert '>>>' in columns_last_7[0]
+                    assert '- include' in columns_last_7[1]
+                    assert '- exclude' in columns_last_7[2]
+                    assert '- name' in columns_last_7[3]
+                    assert '- label' in columns_last_7[4]
+                    assert '- format' in columns_last_7[5]
+                    assert '- markup' in columns_last_7[6]
+                except:
+                    raise Exception('Last 7 columns on \'variables\' sheet should include words ">>>", "include", "excelude", "name"... This test was not passed. Exiting.')
                 if 'include' in map_result:
                     map_df.loc[row,columns_last_7[1]] = map_result['include']
                 if 'exclude' in map_result:
@@ -501,6 +536,130 @@ def fill(map_df,mdd_scheme):
     print("Finished!")
     return map_df
 
+def fill_categories(map_df,mdd_scheme):
+    print("Working on the map: categories...")
+    
+    print("Normalizing property format from MDD read...")
+    mdd_data_records = get_mdd_data_records_from_input_data(mdd_scheme)
+    # mdd_data_root = [ field for field in mdd_data_records if field['name']=='' ][0]
+    # mdd_data_questions = [ field for field in mdd_data_records if detect_item_type_from_mdddata_fields_report(field['name'])=='variable' ]
+    mdd_data_categories = [ cat for cat in mdd_data_records if detect_item_type_from_mdddata_fields_report(cat['name'])=='category' ]
+    # variable_records = prepare_variable_records(mdd_data_questions,mdd_data_categories)
+    category_records = {}
+    for cat in mdd_data_categories:
+        category_records[sanitize_item_name(cat['name'])] = cat
+
+
+    # we'll normalize shortname property name
+    for _, category_record in category_records.items():
+        field_prop_shortname = None
+        field_prop_savremove = None # SavRemove
+        field_prop_value = None
+        for prop_name, prop_value in category_record['properties'].items():
+            if sanitize_item_name(prop_name)==sanitize_item_name('shortname'):
+                field_prop_shortname = prop_value
+            if sanitize_item_name(prop_name)==sanitize_item_name('savremove'):
+                field_prop_savremove = prop_value
+            if sanitize_item_name(prop_name)==sanitize_item_name('value'):
+                field_prop_value = prop_value
+        if field_prop_value is not None:
+            try:
+                field_prop_value = float(field_prop_value)
+                if abs(field_prop_value-round(field_prop_value))<0.001:
+                    field_prop_value = int(field_prop_value)
+                    field_prop_value = '{s}'.format(s=field_prop_value)
+            except:
+                pass
+        if field_prop_shortname:
+            category_record['properties']['ShortName'] = field_prop_shortname
+        if field_prop_savremove:
+            category_record['properties']['SavRemove'] = field_prop_savremove
+        category_record['properties']['Value'] = field_prop_value
+ 
+    rows = map_df.index
+    print('categories sheet, filling the map...')
+    print('iterating over rows...')
+    performance_counter = iter(helper_utility_performancemonitor.PerformanceMonitor(config={
+        'total_records': len(rows),
+        'report_frequency_records_count': 1,
+        'report_frequency_timeinterval': 9,
+        'report_text_pipein': 'filling up categories map',
+    }))
+    for row in rows:
+        variable_name = map_df.loc[row,'Variable']
+        category_name = map_df.loc[row,'Category']
+        item_name = '{variable_name}.Categories[{cat_name}]'.format(variable_name=variable_name,cat_name=category_name)
+        processing_last_item = item_name
+        print('processing {s}...'.format(s=processing_last_item))
+        next(performance_counter)
+        try:
+            map_result = {}
+            try:
+                _, category_last_name = extract_field_name(category_name)
+                item_name = '{variable_name}.Categories[{cat_name}]'.format(variable_name=sanitize_map_name_to_mdd_scheme_name(trim_dots(variable_name)),cat_name=category_last_name)
+                variable_mdd_scheme_name_clean = sanitize_item_name(item_name)
+
+                map_data = {}
+                for attr in CONFIG_MAP_DATA_CATEGORY_FIELDS:
+                    map_data[attr] = map_df.loc[row,attr]
+                need_skip = False
+                # if 'info' in sanitize_item_name(map_data['Type']):
+                #     need_skip = True
+                #     map_result['comment'] = (map_result['comment']+'; ' if 'comment' in map_result else '') + 'skipping - not a category (info node)'
+                # if 'historic' in sanitize_item_name(map_data['Row Type']):
+                #     need_skip = True
+                #     map_result['comment'] = (map_result['comment']+'; ' if 'comment' in map_result else '') + 'skipping - non-existen category (it\'s historic record in the map)'
+
+                if not need_skip:
+                    # variable_record = variable_records[variable_mdd_scheme_name_clean]
+                    category_record = category_records[variable_mdd_scheme_name_clean] if variable_mdd_scheme_name_clean in category_records else None
+                    if category_record:
+                        map_result = process_row_category(map_data,category_record,None)
+                    else:
+                        map_result['comment'] ='Error: category not found in mdd scheme!'
+                else:
+                    map_result['comment'] = (map_result['comment']+' -> ' if 'comment' in map_result else '') + 'skipping!'
+
+            except Exception as e:
+                map_result = {
+                    'comment': 'Error: {e}'.format(e=e)
+                }
+                print('Error: failed when processing {item}: {e}'.format(item=processing_last_item,e=e))
+
+            # apply result
+            if map_result:
+                columns_last_6 = ['{m}'.format(m=m) for m in map_df.columns[-6:]]
+                try:
+                    assert len(columns_last_6)==6
+                    assert '>>>' in columns_last_6[0]
+                    assert '- include' in columns_last_6[1]
+                    assert '- exclude' in columns_last_6[2]
+                    assert '- punch' in columns_last_6[3]
+                    assert '- label' in columns_last_6[4]
+                    assert '- markup' in columns_last_6[5]
+                except:
+                    raise Exception('Last 6 columns on \'variables\' sheet should include words ">>>", "include", "excelude", "name"... This test was not passed. Exiting.')
+                if 'include' in map_result:
+                    map_df.loc[row,columns_last_6[1]] = map_result['include']
+                if 'exclude' in map_result:
+                    map_df.loc[row,columns_last_6[2]] = map_result['exclude']
+                if 'punch' in map_result:
+                    map_df.loc[row,columns_last_6[3]] = map_result['punch']
+                if 'label' in map_result:
+                    map_df.loc[row,columns_last_6[4]] = map_result['label']
+                if 'markup' in map_result:
+                    map_df.loc[row,columns_last_6[5]] = map_result['markup']
+                if 'comment' in map_result and map_result['comment']:
+                    map_df.loc[row,columns_last_6[0]] = '>>>>>>>>' + ' ' + map_result['comment']
+
+        except Exception as e:
+            # something failed? alert which was the last row, and throw the exception back
+            print('Error at {s}'.format(s=processing_last_item))
+            raise e
+
+
+    print("Finished!")
+    return map_df
 
 
 
@@ -580,18 +739,24 @@ def entry_point(runscript_config={}):
             # can happen if the tool is started two times in parallel and it is writing to the same json simultaneously
             raise TypeError('Patch: Can\'t read left file as JSON: {msg}'.format(msg=e))
     
-    inp_map_df = None
+    df_inp_map_variables = None
+    df_inp_map_categories = None
     with open(inp_map_filename) as f_l:
-        inp_map_df = None
+        df_inp_map_variables = None
         print("\n"+'Reading Excel "{file}"...'.format(file=inp_map_filename))
-        # header=7 means how many rows to skip above the banner line
-        inp_map_df = pd.read_excel(inp_map_filename, sheet_name='variables', index_col='Index',header=2,engine='openpyxl').fillna("")
+        # header=2 means how many rows to skip above the banner line
+        # , index_col='Index' is a possible param but we probably don't need it
+        df_inp_map_variables = pd.read_excel(inp_map_filename, sheet_name='variables',header=2,engine='openpyxl').fillna("")
+        df_inp_map_categories = pd.read_excel(inp_map_filename, sheet_name='cats by vars',header=2,engine='openpyxl').fillna("")
         print("\n"+'Reading Excel successful')
     
-    result_df = fill(inp_map_df,inp_mdd_scheme)
+    result_variables_df = fill_variables(df_inp_map_variables,inp_mdd_scheme)
+    result_categories_df = fill_categories(df_inp_map_categories,inp_mdd_scheme)
 
     print('{script_name}: saving as "{fname}"'.format(fname=result_final_fname,script_name=script_name))
-    result_df.to_excel(result_final_fname, sheet_name='variables')
+    with pd.ExcelWriter(result_final_fname) as writer:
+        result_variables_df.to_excel(writer, sheet_name='variables')
+        result_categories_df.to_excel(writer, sheet_name='cats by vars')
 
     time_finish = datetime.now()
     print('{script_name}: finished at {dt} (elapsed {duration})'.format(dt=time_finish,duration=time_finish-time_start,script_name=script_name))
