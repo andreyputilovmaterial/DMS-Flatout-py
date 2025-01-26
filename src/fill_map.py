@@ -117,12 +117,14 @@ def sanitize_shortname(s):
         if not s:
             return ''
         return re.sub(r'^\s*','',re.sub(r'\s*$','',s))
+    def append_zeros(s):
+        if len(s)<3:
+            s = '000'[0:3-len(s)] + s
+        return s
     s = trim(s)
     if not s:
         return s
-    s = re.sub(r'^\s*?(\d+)(?:\.0*?)?\s*?$',lambda m: m[1],s,flags=re.I|re.DOTALL)
-    if len(s)<3:
-        s = '000'[0:3-len(s)] + s
+    s = re.sub(r'^\s*?(\d+)(?:\.0*?)?\s*?$',lambda m: append_zeros(m[1]),s,flags=re.I|re.DOTALL)
     return trim(s)
 
 def extract_field_name(item_name):
@@ -407,6 +409,9 @@ def process_row_variable(map_data,variable_record,variable_records):
                 except aa_logic_replicate.AAFailedFindShortnameException:
                     result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'Err: failed to read ShortName in the style of AA'
                     result_field_name = find_final_short_name_fallback(variable_record,variable_records)
+                
+                if not re.match(r'^\s*?[a-zA-Z\$].*?',result_field_name):
+                    raise Exception('Suggested ShortName is invalid: {s}'.format(s=result_field_name))
 
                 for d in field_levels:
                     if not '<@>' in result_field_name:

@@ -284,9 +284,11 @@ def replicate_read_shortnames_logic(record):
             return ''
         return re.sub(r'^\s*','',re.sub(r'\s*$','',s))
     def sanitize_numeric_short_name_with_z3(s):
-        s = re.sub(r'^\s*?(\d+)(?:\.0*?)?\s*?$',lambda m: m[1],s,flags=re.I|re.DOTALL)
-        if len(s)<3:
-            s = '000'[0:3-len(s)] + s
+        def append_zeros(s):
+            if len(s)<3:
+                s = '000'[0:3-len(s)] + s
+            return s
+        s = re.sub(r'^\s*?(\d+)(?:\.0*?)?\s*?$',lambda m: append_zeros(m[1]),s,flags=re.I|re.DOTALL)
         return s
     try:
         assert record['attributes']['object_type_value']=='0'
