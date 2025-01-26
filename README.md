@@ -1,4 +1,4 @@
-# map-painless-prefill
+# map-flatout-prefill
 Python script that helps you pre-fill flatout map.
 
 Download files from the latest Release page:
