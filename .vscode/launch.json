@@ -5,12 +5,21 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python:fill mdd ",
+            "name": "Python: fill mdd ",
             "type": "python",
             "request": "launch",
             "program": "src/run_universal.py",
             "console": "integratedTerminal",
             "args": ["--program","fill-map","--inp-mdd-scheme","S:\\Personal Folders\\Putilov\\code snippets\\flatout_prefill\\map-flatout-prefill\\tests\\v1.000\\test_data\\R2400814M.mdd.json","--map","S:\\Personal Folders\\Putilov\\code snippets\\flatout_prefill\\map-flatout-prefill\\tests\\v1.000\\test_data\\mdd_map_R2400814M.xlsx","--output-filename","S:\\Personal Folders\\Putilov\\code snippets\\flatout_prefill\\map-flatout-prefill\\tests\\v1.000\\test_data\\script-result.xlsx"],
+            "justMyCode": true
+        },
+        {
+            "name": "Python: read mdd ",
+            "type": "python",
+            "request": "launch",
+            "program": "src/run_universal.py",
+            "console": "integratedTerminal",
+            "args": ["--program","read_mdd","--mdd","S:\\Personal Folders\\Putilov\\code snippets\\flatout_prefill\\map-flatout-prefill\\tests\\v1.000\\test_data\\R2400814M.mdd"],
             "justMyCode": true
         }
     ]

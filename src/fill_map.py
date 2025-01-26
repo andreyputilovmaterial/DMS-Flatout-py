@@ -110,6 +110,21 @@ def trim_dots(s):
 def sanitize_item_name(item_name):
     return re.sub(r'\s*$','',re.sub(r'^\s*','',re.sub(r'\s*([\[\{\]\}\.])\s*',lambda m:'{m}'.format(m=m[1]),item_name,flags=re.I))).lower()
 
+def sanitize_shortname(s):
+    def trim(s):
+        if s==0:
+            return trim('0')
+        if not s:
+            return ''
+        return re.sub(r'^\s*','',re.sub(r'\s*$','',s))
+    s = trim(s)
+    if not s:
+        return s
+    s = re.sub(r'^\s*?(\d+)(?:\.0*?)?\s*?$',lambda m: m[1],s,flags=re.I|re.DOTALL)
+    if len(s)<3:
+        s = '000'[0:3-len(s)] + s
+    return trim(s)
+
 def extract_field_name(item_name):
     m = re.match(r'^\s*((?:\w.*?\.)*)(\w+)\s*$',item_name,flags=re.I)
     if m:
@@ -120,11 +135,12 @@ def extract_field_name(item_name):
 def extract_parent_name(item_name):
     if item_name=='':
         return '', ''
-    m = re.match(r'^\s*(\w+)((?:\.\w*?)*)\s*$',item_name,flags=re.I)
+    m = re.match(r'^\s*(\w+)((?:\.\w*?)+)\s*$',item_name,flags=re.I)
     if m:
         return trim_dots(m[1]), trim_dots(m[2])
     else:
-        raise ValueError('Can\'t extract field name from "{s}"'.format(s=item_name))
+        # raise ValueError('Can\'t extract field name from "{s}"'.format(s=item_name))
+        return '', item_name
 
 def extract_category_name(item_name):
     m = re.match(r'^\s*(\w+.*?\w)\.(?:categories|elements)\s*?\[\s*?\{?\s*?(\w+)\s*?\}?\s*?\]\s*$',item_name,flags=re.I)
@@ -172,11 +188,13 @@ def prepare_variable_records(mdd_data_records,mdd_data_categories):
         variable_records[question_id_clean] = rec
     for rec in mdd_data_records:
         path, _ = extract_field_name(rec['name'])
+        rec['parent'] = None
         if path and not (path==''):
             variable_parent = variable_records[sanitize_item_name(path)]
-            if not 'subfields' in variable_parent:
-                variable_parent['subfields'] = []
-            variable_parent['subfields'].append(rec) # that's a reference, and child item should also be updated, when it receives its own subfields
+            if not 'fields' in variable_parent:
+                variable_parent['fields'] = []
+            variable_parent['fields'].append(rec) # that's a reference, and child item should also be updated, when it receives its own fields
+            rec['parent'] = variable_parent
     for cat_mdd in mdd_data_categories:
         question_name, category_name = extract_category_name(cat_mdd['name'])
         question_id_clean = sanitize_item_name(question_name)
@@ -187,13 +205,41 @@ def prepare_variable_records(mdd_data_records,mdd_data_categories):
 
     return variable_records
 
-def should_exclude_field(variable_record):
+def should_exclude_field_heuristic(variable_record):
     field_exclude = False
     if (variable_record['attributes']['data_type'] if variable_record['attributes']['object_type_value']=='0' else '4') == '0': # info item, skip, 4 = "object"
         field_exclude = True
     if sanitize_item_name(variable_record['name'])==sanitize_item_name('NavButtonSelect'):
         field_exclude = True # that stupid field from mf-polar
     return field_exclude
+
+def should_exclude_field_removed_properties(record):
+    def trim(s):
+        return re.sub(r'^\s*','',re.sub(r'\s*$','',s))
+    def check_val_sanitize_value(s):
+        s = '{s}'.format(s=s)
+        s = trim(s)
+        s = s.lower()
+        return s
+    def check_flag_removal(record):
+        properties_check = [
+            'SavRemove',
+            'D_Remove',
+            'D_RemoveSav',
+        ]
+        flag_exclusion = False
+        for prop_name, prop_value in record['properties'].items():
+            is_prop_of_interest = False
+            for prop_of_interest in properties_check:
+                if check_val_sanitize_value(prop_name)==check_val_sanitize_value(prop_of_interest):
+                    is_prop_of_interest = True
+            if is_prop_of_interest:
+                flag_exclusion = flag_exclusion or (check_val_sanitize_value(prop_value)==check_val_sanitize_value('true'))
+        return flag_exclusion
+    if record['parent']:
+        return check_flag_removal(record) or should_exclude_field_removed_properties(record['parent'])
+    else:
+        return check_flag_removal(record)
 
 def check_if_improper_name(name):
     is_improper_name = False
@@ -267,7 +313,7 @@ def get_levels(variable_record,variable_records,is_last=True):
 
 
 
-def find_final_short_name(variable_record,variable_records):
+def find_final_short_name_fallback(variable_record,variable_records):
     field_prop_shortname = variable_record['properties']['ShortName'] if 'ShortName' in variable_record['properties'] else ''
     
     parent_path, field_name = extract_field_name(variable_record['name'])
@@ -292,13 +338,15 @@ def find_final_short_name(variable_record,variable_records):
         if not parent_path:
             return field_name
         elif len(siblings)==0:
-            return find_final_short_name(parent_variable_record,variable_records)
+            return find_final_short_name_fallback(parent_variable_record,variable_records)
         elif not check_if_improper_name(field_name) and variable_record['name']==siblings_including_this_field[0]['name']:
-            return find_final_short_name(parent_variable_record,variable_records)
+            return find_final_short_name_fallback(parent_variable_record,variable_records)
         else:
-            return find_final_short_name(parent_variable_record,variable_records) + '_' + ( field_prop_shortname if field_prop_shortname else field_name )
+            return find_final_short_name_fallback(parent_variable_record,variable_records) + '_' + ( field_prop_shortname if field_prop_shortname else field_name )
     else:
         return field_prop_shortname
+
+
 
 
 def process_row_variable(map_data,variable_record,variable_records):
@@ -311,7 +359,7 @@ def process_row_variable(map_data,variable_record,variable_records):
     result_field_comment = None
 
     skip = False
-    if ('SavRemove' in variable_record['properties']) and ('true' in sanitize_item_name(variable_record['properties']['SavRemove'])):
+    if should_exclude_field_removed_properties(variable_record):
         skip = True
         result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'skip - SavRemove=true'
 
@@ -347,20 +395,30 @@ def process_row_variable(map_data,variable_record,variable_records):
             
             if should_include:
 
-                # assert not should_exclude_field(variable_record) # BannerCopyRight has a short name but it can't be represented in SPSS - this check fails but we need to continue
+                # assert not should_exclude_field_heuristic(variable_record) # BannerCopyRight has a short name but it can't be represented in SPSS - this check fails but we need to continue
                 
                 result_field_include = 'x' if should_include else None
 
                 levels_count = 0
-                result_field_name = find_final_short_name(variable_record,variable_records)
+
+                result_field_name = None
+                try:
+                    result_field_name = aa_logic_replicate.replicate_read_shortnames_logic(variable_record)
+                except aa_logic_replicate.AAFailedFindShortnameException:
+                    result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'Err: failed to read ShortName in the style of AA'
+                    result_field_name = find_final_short_name_fallback(variable_record,variable_records)
+
                 for d in field_levels:
-                    result_field_name = result_field_name + '_[L{d}z3]'.format(d=d)
+                    if not '<@>' in result_field_name:
+                        result_field_name = result_field_name + '<@>'
+                    result_field_name = result_field_name.replace('<@>','_[L{d}z3]<@>'.format(d=d))
                     levels_count = levels_count + 1
                     if d<=2:
                         if not(map_data['Question L{d}'.format(d=d)]):
                             # raise Exception('levels check was not passes, detected {a} when iterating in mdd but int the map it\'s {b}'.format(a=levels_count,b=map_data['Level']))
                             result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'ALERT: levels check mismatch, adding level L{d} but the column Question L{d} is blank ({q})'.format(d=d,q=map_data['Question L{d}'.format(d=d)])
-
+                result_field_name = result_field_name.replace('<@>','')
+                
                 levels_count = 0
                 result_field_label = variable_record['label']
                 if 0 in field_levels:
@@ -419,7 +477,10 @@ def fill_variables(map_df,mdd_scheme):
                 field_prop_shortname = prop_value
             if sanitize_item_name(prop_name)==sanitize_item_name('savremove'):
                 field_prop_savremove = prop_value
+        # if field_prop_shortname:
         if field_prop_shortname:
+            field_prop_shortname = sanitize_shortname(field_prop_shortname)
+        if True:
             variable_record['properties']['ShortName'] = field_prop_shortname
         if field_prop_savremove:
             variable_record['properties']['SavRemove'] = field_prop_savremove
@@ -443,9 +504,10 @@ def fill_variables(map_df,mdd_scheme):
             parent = variable_records[sanitize_item_name(parent_path)]
         else:
             parent = mdd_data_root
-        if not 'fields' in parent:
-            parent['fields'] = []
-        parent['fields'].append(variable_record)
+        # # omg I'm stupid this was already appended above in prepare_variable_records()
+        # if not 'fields' in parent:
+        #     parent['fields'] = []
+        # parent['fields'].append(variable_record)
     def update(node):
         if not 'fields' in node:
             return
@@ -466,6 +528,12 @@ def fill_variables(map_df,mdd_scheme):
         else:
             node['level_reached'] = level_max
         
+    mdd_data_root['fields'] = []
+    for _, rec in variable_records.items():
+        parent_path, _ = extract_parent_name(rec['name'])
+        if parent_path=='' or not parent_path:
+            mdd_data_root['fields'].append(rec)
+
     update(mdd_data_root)
  
     rows = map_df.index
@@ -591,11 +659,13 @@ def fill_categories(map_df,mdd_scheme):
                     field_prop_value = '{s}'.format(s=field_prop_value)
             except:
                 pass
-        if field_prop_shortname:
+        # if field_prop_shortname:
+        if True:
             category_record['properties']['ShortName'] = field_prop_shortname
         if field_prop_savremove:
             category_record['properties']['SavRemove'] = field_prop_savremove
-        category_record['properties']['Value'] = field_prop_value
+        if True:
+            category_record['properties']['Value'] = field_prop_value
  
     rows = map_df.index
     print('categories sheet, filling the map...')
