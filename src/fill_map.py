@@ -11,12 +11,15 @@ import pandas as pd
 if __name__ == '__main__':
     # run as a program
     import helper_utility_performancemonitor
+    import aa_logic_replicate
 elif '.' in __name__:
     # package
     from . import helper_utility_performancemonitor
+    from . import aa_logic_replicate
 else:
     # included with no parent package
     import helper_utility_performancemonitor
+    import aa_logic_replicate
 
 
 
@@ -136,6 +139,9 @@ def extract_category_name(item_name):
 
 
 
+
+
+
 def get_mdd_data_records_from_input_data(inp_mdd_scheme):
     def convert_list_to_dict(data_lst):
         result = {}
@@ -203,6 +209,14 @@ def check_if_improper_name(name):
 
 def detect_field_type(variable_record):
     a = variable_record['attributes']
+    # ObjectTypeValue constants:
+    # 0 = Question
+    # 1 = Array
+    # 2 = Grid
+    # 3 = Class
+    # 4 = Element
+    # 10 = VariableInstance
+    # 16 = Variables
     if a['object_type_value']=='1' or a['object_type_value']=='2':
         return 'loop'
     elif a['object_type_value']=='3':
@@ -309,6 +323,13 @@ def process_row_variable(map_data,variable_record,variable_records):
         if field_type=='loop' or field_type=='block':
             skip = True
             result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'skip - loop of block - definitions should be only applied to its fields'
+        
+        if not aa_logic_replicate.should_process_short_name(variable_record):
+            skip = True
+            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'skip - we replicated AA logic and it indicated False - maybe a system variable or has no case data...'
+        else:
+            result_field_include = ''
+
         
         if not skip:
 
@@ -494,9 +515,9 @@ def fill_variables(map_df,mdd_scheme):
 
             except Exception as e:
                 map_result = {
-                    'comment': '{e}'.format(e=e)
+                    'comment': 'Error: {e}'.format(e=e)
                 }
-                print(e)
+                print('Error: failed when processing {item}: {e}'.format(item=processing_last_item,e=e))
 
             # apply result
             if map_result:
