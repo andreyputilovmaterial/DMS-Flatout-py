@@ -6,7 +6,7 @@ Download files from the latest Release page:
 
 To get it started, just edit the BAT file and insert the name of your map, and start it. As a result, it will generate:
 `mdd_map_R123456.xlsx_filled_with_script.xlsx`
-in the same directory. Just grab contents from columns AI-AN
+in the same directory. Just grab contents from columns AI-AN ("variables" sheet) and grab analysis values from columns M-Q on "cats by vars" sheet.
 
 Enjoy
 
