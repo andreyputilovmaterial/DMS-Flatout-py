@@ -457,6 +457,12 @@ def process_row_variable(map_data,variable_record,variable_records):
 
 def process_row_category(map_data,category_record,variable_records):
     analysis_value = category_record['properties']['Value']
+    try:
+        analysis_value = float(analysis_value)
+        if abs(round(analysis_value)-analysis_value)<0.001:
+            analysis_value = int(round(analysis_value))
+    except:
+        pass
     return {
         'punch': analysis_value,
     }
@@ -660,7 +666,7 @@ def fill_categories(map_df,mdd_scheme):
             try:
                 field_prop_value = float(field_prop_value)
                 if abs(field_prop_value-round(field_prop_value))<0.001:
-                    field_prop_value = int(field_prop_value)
+                    field_prop_value = int(round(field_prop_value))
                     field_prop_value = '{s}'.format(s=field_prop_value)
             except:
                 pass
