@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import argparse
+from fnmatch import fnmatch
 from pathlib import Path
 import json, re
 from unittest import result
@@ -22,6 +23,9 @@ else:
     import aa_logic_replicate
 
 
+
+
+CONFIG_ANALYSISVALUE_CHECK_IF_WHOLE_ERROR = 0.0001
 
 CONFIG_MAP_DATA_VARIABLE_FIELDS = [
 	'Variable',
@@ -101,15 +105,40 @@ CONFIG_KNOWN_SYSTEM_FIELDS = {
 
 
 
+# the idea of this function
+# is to resolve some naming mismatches
+# there are different ways to address items
+# sometimes the "Name" is "Familiarity[..].GV"
+# which is in fact more common, it seems
+# maybe I should update my tools to match
+# bacuse I am just using "Familiarity.GV"
+# because "[..]" part is really unnecessary
+# and in mdm you access objects via mdm.Fields["Familiarity"].Fields["GV"]
+# so this function is just removing any "[...]" and keeps just item names separated with a dot between levels
 def sanitize_map_name_to_mdd_scheme_name(s):
     return re.sub(r'(\w+)\s*?\[\s*?\{?[^\]]*?\s*?\}?\s*?\]',lambda m: '{s}'.format(s=m[1]),s,flags=re.I|re.DOTALL)
 
+# a helper fn that makes it easier to produce combined name from parent name and field name
+# I can just append parent name and field name with a dot and trim if some of the names is blank and we have a dot at the beginning or at the end
+# this looks like maybe dirty, adding something unnecessary and then trimming with regex
+# Grant is just leaving a dot at the end
+# I don't think it's a beautiful solution either
+# so I have this fn trim_dots to have names standartized - even if there is a dot at the end or not
 def trim_dots(s):
     return re.sub(r'^\s*?\.','',re.sub(r'\.\s*?$','',s,flags=re.I),flags=re.I)
 
+# make name lowercase so that we can check against dict entries case-insensitively
+# this fn also trims whitespaces at the beginning and at the end, in case someone copied name from some word doc and pasted it to excel with specs, and the are some non-breakable non-visible spaces, or something like this, which is common, when people us MS Office
 def sanitize_item_name(item_name):
     return re.sub(r'\s*$','',re.sub(r'^\s*','',re.sub(r'\s*([\[\{\]\}\.])\s*',lambda m:'{m}'.format(m=m[1]),item_name,flags=re.I))).lower()
 
+# helper fn
+# to make spss variable name a name
+# trim whitespaces (as described above - they can be coming if specs are copied from MS Word)
+# and also
+# if SHortName is just a number which is supposed to be for numeric of text grids,
+# in AA scheme it is also appeneded to 3 decimal places
+# that's what we are doing right here, if ShortName is a number
 def sanitize_shortname(s):
     def trim(s):
         if s==0:
@@ -127,6 +156,9 @@ def sanitize_shortname(s):
     s = re.sub(r'^\s*?(\d+)(?:\.0*?)?\s*?$',lambda m: append_zeros(m[1]),s,flags=re.I|re.DOTALL)
     return trim(s)
 
+# helper fn
+# similar to my other tools
+# splits the name with dots and extracts the last part
 def extract_field_name(item_name):
     m = re.match(r'^\s*((?:\w.*?\.)*)(\w+)\s*$',item_name,flags=re.I)
     if m:
@@ -134,6 +166,9 @@ def extract_field_name(item_name):
     else:
         raise ValueError('Can\'t extract field name from "{s}"'.format(s=item_name))
 
+# helper fn
+# similar to my other tools
+# splits the name with dots and extracts the leading part
 def extract_parent_name(item_name):
     if item_name=='':
         return '', ''
@@ -144,6 +179,11 @@ def extract_parent_name(item_name):
         # raise ValueError('Can\'t extract field name from "{s}"'.format(s=item_name))
         return '', item_name
 
+# helper fn
+# similar to my other tools
+# in items populated from mdd_read, the syntax for addressing items is
+# "Variable.Categories[CategoryName]"
+# so this fn helps us extract category name
 def extract_category_name(item_name):
     m = re.match(r'^\s*(\w+.*?\w)\.(?:categories|elements)\s*?\[\s*?\{?\s*?(\w+)\s*?\}?\s*?\]\s*$',item_name,flags=re.I)
     if m:
@@ -151,26 +191,11 @@ def extract_category_name(item_name):
     else:
         raise ValueError('Can\'t extract category name from "{s}"'.format(s=item_name))
 
-
-
-
-
-
-
-
-
-
-def get_mdd_data_records_from_input_data(inp_mdd_scheme):
-    def convert_list_to_dict(data_lst):
-        result = {}
-        for record in data_lst:
-            result[record['name']] = record['value']
-        return result
-    mdd_data_records = ([sect for sect in inp_mdd_scheme['sections'] if sect['name']=='fields'])[0]['content']
-    mdd_data_records = [ {**q,'properties':convert_list_to_dict(q['properties'] if 'properties' in q else []),'attributes':convert_list_to_dict(q['attributes'] if 'attributes' in q else [])} for q in mdd_data_records ]
-    return mdd_data_records
-
-
+# helper fn
+# similar to my other tools
+# in items populated from mdd_read, the syntax for addressing items is
+# "Variable.Categories[CategoryName]"
+# so this fn helps us detect if an item is a category or a variable or a root item (name='')
 def detect_item_type_from_mdddata_fields_report(item_name):
     item_name_clean = sanitize_item_name(item_name)
     if re.match(r'^\s*?$',item_name_clean,flags=re.I):
@@ -182,7 +207,27 @@ def detect_item_type_from_mdddata_fields_report(item_name):
     else:
         raise ValueError('Item name is not recognized, is it a variable or a category: "{s}"'.format(s=item_name))
 
-def prepare_variable_records(mdd_data_records,mdd_data_categories):
+
+
+
+
+
+
+
+
+# helper fn to prep propgram inputs
+def get_mdd_data_records_from_input_data(inp_mdd_scheme):
+    def convert_list_to_dict(data_lst):
+        result = {}
+        for record in data_lst:
+            result[record['name']] = record['value']
+        return result
+    mdd_data_records = ([sect for sect in inp_mdd_scheme['sections'] if sect['name']=='fields'])[0]['content']
+    mdd_data_records = [ {**q,'properties':convert_list_to_dict(q['properties'] if 'properties' in q else []),'attributes':convert_list_to_dict(q['attributes'] if 'attributes' in q else [])} for q in mdd_data_records ]
+    return mdd_data_records
+
+# helper fn to prep propgram inputs
+def prepare_variable_records(mdd_data_records,mdd_data_categories,mdd_data_root):
     variable_records = {}
     # for rec in variable_specs['variables_metadata']:
     for rec in mdd_data_records:
@@ -204,6 +249,15 @@ def prepare_variable_records(mdd_data_records,mdd_data_categories):
         if not 'categories' in variable:
             variable['categories'] = []
         variable['categories'].append({**cat_mdd,'name':category_name}) # that's not a reference, that's a copy; and name is a category name
+
+    variable_records[''] = mdd_data_root
+
+    mdd_data_root['fields'] = []
+    for _, rec in variable_records.items():
+        if not (rec['name']==''):
+            parent_path, _ = extract_parent_name(rec['name'])
+            if parent_path=='' or not parent_path:
+                mdd_data_root['fields'].append(rec)
 
     return variable_records
 
@@ -256,7 +310,10 @@ def check_if_improper_name(name):
 
 
 def detect_field_type(variable_record):
-    a = variable_record['attributes']
+    if variable_record['name']=='':
+        return 'root'
+    object_type_value = variable_record['attributes']['object_type_value']
+    data_type = variable_record['attributes']['data_type'] if object_type_value=='0' else None
     # ObjectTypeValue constants:
     # 0 = Question
     # 1 = Array
@@ -265,22 +322,22 @@ def detect_field_type(variable_record):
     # 4 = Element
     # 10 = VariableInstance
     # 16 = Variables
-    if a['object_type_value']=='1' or a['object_type_value']=='2':
+    if object_type_value=='1' or object_type_value=='2':
         return 'loop'
-    elif a['object_type_value']=='3':
+    elif object_type_value=='3':
         return 'block'
-    elif a['object_type_value']=='16':
+    elif object_type_value=='16':
         return 'plain'
-    elif a['object_type_value']=='0':
-        if a['data_type']=='3':
-            if a['maxvalue']=='1':
+    elif object_type_value=='0':
+        if data_type=='3':
+            if 'maxvalue' in variable_record['attributes'] and variable_record['attributes']['maxvalue']=='1':
                 return 'single-punch'
             else:
                 return 'multi-punch'
         else:
             return 'plain'
     else:
-        raise ValueError('unrecognized object_type_value: {o}'.format(o=a['object_type_value']))
+        raise ValueError('unrecognized object_type_value: {o}'.format(o=object_type_value))
 
 
 def get_recursive_prop_shortname(variable_record,variable_records):
@@ -303,12 +360,12 @@ def find_final_complex_name(field_prop_shortname,variable_record,variable_record
 
 
 
-def get_levels(variable_record,variable_records,is_last=True):
+def get_collection_of_levels(variable_record,variable_records,is_last=True):
     this_levels = [variable_record['level']] if 'level' in variable_record and variable_record['level'] is not None else []
     if not is_last and 'level' in variable_record and variable_record['level']==0:
         this_levels = []
     parent_path, _ = extract_field_name(variable_record['name'])
-    parent_levels = get_levels(variable_records[sanitize_item_name(parent_path)],variable_records,is_last=False) if parent_path else []
+    parent_levels = get_collection_of_levels(variable_records[sanitize_item_name(parent_path)],variable_records,is_last=False) if parent_path else []
     return this_levels + parent_levels
 
 
@@ -316,6 +373,8 @@ def get_levels(variable_record,variable_records,is_last=True):
 
 
 def find_final_short_name_fallback(variable_record,variable_records):
+    if variable_record['name']=='':
+        return None
     field_prop_shortname = variable_record['properties']['ShortName'] if 'ShortName' in variable_record['properties'] else ''
     
     parent_path, field_name = extract_field_name(variable_record['name'])
@@ -347,6 +406,122 @@ def find_final_short_name_fallback(variable_record,variable_records):
             return find_final_short_name_fallback(parent_variable_record,variable_records) + '_' + ( field_prop_shortname if field_prop_shortname else field_name )
     else:
         return field_prop_shortname
+
+
+
+
+# TODO: this is not a clean fn, it modifies its passed arguments
+# but I don't care for now, it's easier, and saves more memory and processor time, if we don't create unnecessary copies
+# because its intended use is
+# variable_records = populate_levels_variable_records(variable_records)
+def populate_levels_variable_records(variable_records):
+    def update(node):
+        if not 'fields' in node:
+            return
+        level_max = None
+        for child in node['fields']:
+            update(child)
+            if 'level' in child and child['level'] is not None:
+                if level_max is None or child['level']>level_max:
+                    level_max = child['level']
+            elif 'level_reached' in child:
+                if level_max is None or child['level_reached']>level_max:
+                    level_max = child['level_reached']
+        if 'level' in node:
+            level_add = node['level']
+            if node['level'] is not None:
+                node['level'] = (level_max if level_max is not None else 0) + level_add
+            node['level_reached'] = (level_max if level_max is not None else 0) + (level_add if level_add is not None else 0)
+        else:
+            node['level_reached'] = level_max
+    
+    mdd_data_root = variable_records['']
+    for _, variable_record in variable_records.items():
+        type = detect_field_type(variable_record)
+        level = None
+        if type=='loop':
+            level = 1
+        elif type=='block' or type=='root' or type=='plain' or type=='single-punch':
+            level = None
+        elif type=='multi-punch':
+            level = 0
+        else:
+            raise ValueError('unrecognized variable type: {o}'.format(o=type))
+        variable_record['level'] = level
+        # parent_path, field_name = extract_field_name(variable_record['name'])
+        # parent = None
+        # if parent_path:
+        #     parent = variable_records[sanitize_item_name(parent_path)]
+        # else:
+        #     parent = mdd_data_root
+        # # omg I'm stupid this was already appended above in prepare_variable_records()
+        # if not 'fields' in parent:
+        #     parent['fields'] = []
+        # parent['fields'].append(variable_record)
+        
+    update(mdd_data_root)
+    return variable_records
+
+
+
+
+# TODO: this is not a clean fn, it modifies its passed arguments
+# but I don't care for now, it's easier, and saves more memory and processor time, if we don't create unnecessary copies
+# because its intended use is
+# variable_records = normalize_properties_variable_records(variable_records)
+def normalize_properties_variable_records(variable_records):
+    for _, variable_record in variable_records.items():
+        field_prop_shortname = None
+        field_prop_savremove = None # SavRemove
+        for prop_name, prop_value in variable_record['properties'].items():
+            if sanitize_item_name(prop_name)==sanitize_item_name('shortname'):
+                field_prop_shortname = prop_value
+            if sanitize_item_name(prop_name)==sanitize_item_name('savremove'):
+                field_prop_savremove = prop_value
+        # if field_prop_shortname:
+        if field_prop_shortname:
+            field_prop_shortname = sanitize_shortname(field_prop_shortname)
+        if True:
+            variable_record['properties']['ShortName'] = field_prop_shortname
+        if field_prop_savremove:
+            variable_record['properties']['SavRemove'] = field_prop_savremove
+    return variable_records
+
+
+# TODO: this is not a clean fn, it modifies its passed arguments
+# but I don't care for now, it's easier, and saves more memory and processor time, if we don't create unnecessary copies
+# because its intended use is
+# variable_records = normalize_properties_category_records(variable_records)
+def normalize_properties_category_records(category_records):
+    for _, category_record in category_records.items():
+        field_prop_shortname = None
+        field_prop_savremove = None # SavRemove
+        field_prop_value = None
+        for prop_name, prop_value in category_record['properties'].items():
+            if sanitize_item_name(prop_name)==sanitize_item_name('shortname'):
+                field_prop_shortname = prop_value
+            if sanitize_item_name(prop_name)==sanitize_item_name('savremove'):
+                field_prop_savremove = prop_value
+            if sanitize_item_name(prop_name)==sanitize_item_name('value'):
+                field_prop_value = prop_value
+        if field_prop_value is not None:
+            try:
+                field_prop_value = float(field_prop_value)
+                if abs(field_prop_value-round(field_prop_value))<CONFIG_ANALYSISVALUE_CHECK_IF_WHOLE_ERROR:
+                    # if it's close enough to rounded whole
+                    field_prop_value = int(round(field_prop_value))
+                    field_prop_value = '{s}'.format(s=field_prop_value)
+            except:
+                pass
+        # if field_prop_shortname:
+        if True:
+            category_record['properties']['ShortName'] = field_prop_shortname
+        if field_prop_savremove:
+            category_record['properties']['SavRemove'] = field_prop_savremove
+        if True:
+            category_record['properties']['Value'] = field_prop_value
+    return category_records
+
 
 
 
@@ -384,7 +559,7 @@ def process_row_variable(map_data,variable_record,variable_records):
         if not skip:
 
             # indicates if it's iterative
-            field_levels = get_levels(variable_record,variable_records)
+            field_levels = get_collection_of_levels(variable_record,variable_records)
 
             # find if it has shortname
             item_has_shortname = not not get_recursive_prop_shortname(variable_record,variable_records)
@@ -414,6 +589,15 @@ def process_row_variable(map_data,variable_record,variable_records):
                     raise Exception('Suggested ShortName is invalid: {s}'.format(s=result_field_name))
 
                 for d in field_levels:
+                    # explanation
+                    # "<@>" is an insert marker
+                    # I designed it to indicate where the iterative part should be added
+                    # so I am using "result = result.replace('<@>",iterative_part..." instead of result = result + iterative_part
+                    # cause sometimes we have S3_001_Codes
+                    # so the iterative part ("_001") is not added at the end but in the middle
+                    # this is not super beautiful design but it is also quite simple and efficient and is working well
+                    # so I don't feel sorry for this)))
+                    # note I added similar marker to "aa_logic-replicate", so it's now program-wide
                     if not '<@>' in result_field_name:
                         result_field_name = result_field_name + '<@>'
                     result_field_name = result_field_name.replace('<@>','_[L{d}z3]<@>'.format(d=d))
@@ -421,7 +605,7 @@ def process_row_variable(map_data,variable_record,variable_records):
                     if d<=2:
                         if not(map_data['Question L{d}'.format(d=d)]):
                             # raise Exception('levels check was not passes, detected {a} when iterating in mdd but int the map it\'s {b}'.format(a=levels_count,b=map_data['Level']))
-                            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'ALERT: levels check mismatch, adding level L{d} but the column Question L{d} is blank ({q})'.format(d=d,q=map_data['Question L{d}'.format(d=d)])
+                            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'WARNING: levels check mismatch, adding level L{d} but the column Question L{d} is blank ({q})'.format(d=d,q=map_data['Question L{d}'.format(d=d)])
                 result_field_name = result_field_name.replace('<@>','')
                 
                 levels_count = 0
@@ -433,14 +617,14 @@ def process_row_variable(map_data,variable_record,variable_records):
                     if d<=2:
                         if not(map_data['Question L{d}'.format(d=0)]):
                             # raise Exception('levels check was not passes, detected {a} when iterating in mdd but int the map it\'s {b}'.format(a=levels_count,b=map_data['Level']))
-                            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'ALERT: levels check mismatch, adding level L{d} but the column Question L{d} is blank ({q})'.format(d=d,q=map_data['Question L{d}'.format(d=d)])
+                            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'WARNING: levels check mismatch, adding level L{d} but the column Question L{d} is blank ({q})'.format(d=d,q=map_data['Question L{d}'.format(d=d)])
                 for d in [m for m in field_levels if m!=0]:
                     result_field_label = '{{L{d}}}: '.format(d=d) + result_field_label
                     levels_count = levels_count + 1
                     if d<=2:
                         if not(map_data['Question L{d}'.format(d=d)]):
                             # raise Exception('levels check was not passes, detected {a} when iterating in mdd but int the map it\'s {b}'.format(a=levels_count,b=map_data['Level']))
-                            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'ALERT: levels check mismatch, adding level L{d} but the column Question L{d} is blank ({q})'.format(d=d,q=map_data['Question L{d}'.format(d=d)])
+                            result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'WARNING: levels check mismatch, adding level L{d} but the column Question L{d} is blank ({q})'.format(d=d,q=map_data['Question L{d}'.format(d=d)])
 
     assert (not not result_field_name)==(not not result_field_include)
     return {
@@ -459,12 +643,13 @@ def process_row_category(map_data,category_record,variable_records):
     analysis_value = category_record['properties']['Value']
     try:
         analysis_value = float(analysis_value)
-        if abs(round(analysis_value)-analysis_value)<0.001:
+        if abs(round(analysis_value)-analysis_value)<CONFIG_ANALYSISVALUE_CHECK_IF_WHOLE_ERROR:
+            # if it's close enough to rounded whole
             analysis_value = int(round(analysis_value))
     except:
         pass
     return {
-        'punch': analysis_value,
+        'value': analysis_value,
     }
 
 
@@ -472,80 +657,17 @@ def process_row_category(map_data,category_record,variable_records):
 def fill_variables(map_df,mdd_scheme):
     print("Working on the map: variables...")
     
-    print("Normalizing property format from MDD read...")
     mdd_data_records = get_mdd_data_records_from_input_data(mdd_scheme)
     mdd_data_root = [ field for field in mdd_data_records if field['name']=='' ][0]
     mdd_data_questions = [ field for field in mdd_data_records if detect_item_type_from_mdddata_fields_report(field['name'])=='variable' ]
     mdd_data_categories = [ cat for cat in mdd_data_records if detect_item_type_from_mdddata_fields_report(cat['name'])=='category' ]
-    variable_records = prepare_variable_records(mdd_data_questions,mdd_data_categories)
+    variable_records = prepare_variable_records(mdd_data_questions,mdd_data_categories,mdd_data_root)
 
-    # we'll normalize shortname property name
-    for _, variable_record in variable_records.items():
-        field_prop_shortname = None
-        field_prop_savremove = None # SavRemove
-        for prop_name, prop_value in variable_record['properties'].items():
-            if sanitize_item_name(prop_name)==sanitize_item_name('shortname'):
-                field_prop_shortname = prop_value
-            if sanitize_item_name(prop_name)==sanitize_item_name('savremove'):
-                field_prop_savremove = prop_value
-        # if field_prop_shortname:
-        if field_prop_shortname:
-            field_prop_shortname = sanitize_shortname(field_prop_shortname)
-        if True:
-            variable_record['properties']['ShortName'] = field_prop_shortname
-        if field_prop_savremove:
-            variable_record['properties']['SavRemove'] = field_prop_savremove
+    print("Normalizing property format from MDD read...")
+    variable_records = normalize_properties_variable_records(variable_records)
 
     print("Detecting levels for every variable...")
-    for _, variable_record in variable_records.items():
-        type = detect_field_type(variable_record)
-        level = None
-        if type=='loop':
-            level = 1
-        elif type=='block' or type=='plain' or type=='single-punch':
-            level = None
-        elif type=='multi-punch':
-            level = 0
-        else:
-            raise ValueError('unrecognized variable type: {o}'.format(o=type))
-        variable_record['level'] = level
-        parent_path, field_name = extract_field_name(variable_record['name'])
-        parent = None
-        if parent_path:
-            parent = variable_records[sanitize_item_name(parent_path)]
-        else:
-            parent = mdd_data_root
-        # # omg I'm stupid this was already appended above in prepare_variable_records()
-        # if not 'fields' in parent:
-        #     parent['fields'] = []
-        # parent['fields'].append(variable_record)
-    def update(node):
-        if not 'fields' in node:
-            return
-        level_max = None
-        for child in node['fields']:
-            update(child)
-            if 'level' in child and child['level'] is not None:
-                if level_max is None or child['level']>level_max:
-                    level_max = child['level']
-            elif 'level_reached' in child:
-                if level_max is None or child['level_reached']>level_max:
-                    level_max = child['level_reached']
-        if 'level' in node:
-            level_add = node['level']
-            if node['level'] is not None:
-                node['level'] = (level_max if level_max is not None else 0) + level_add
-            node['level_reached'] = (level_max if level_max is not None else 0) + (level_add if level_add is not None else 0)
-        else:
-            node['level_reached'] = level_max
-        
-    mdd_data_root['fields'] = []
-    for _, rec in variable_records.items():
-        parent_path, _ = extract_parent_name(rec['name'])
-        if parent_path=='' or not parent_path:
-            mdd_data_root['fields'].append(rec)
-
-    update(mdd_data_root)
+    variable_records = populate_levels_variable_records(variable_records)
  
     rows = map_df.index
     print('variables sheet, filling the map...')
@@ -553,6 +675,7 @@ def fill_variables(map_df,mdd_scheme):
     for record_name, record_contents in CONFIG_KNOWN_SYSTEM_FIELDS.items():
         record_name_clean = sanitize_item_name(trim_dots(record_name))
         known_system_fields_with_name_clean[record_name_clean] = record_contents
+    
     print('iterating over rows...')
     performance_counter = iter(helper_utility_performancemonitor.PerformanceMonitor(config={
         'total_records': len(rows),
@@ -670,34 +793,8 @@ def fill_categories(map_df,mdd_scheme):
     for cat in mdd_data_categories:
         category_records[sanitize_item_name(cat['name'])] = cat
 
-
     # we'll normalize shortname property name
-    for _, category_record in category_records.items():
-        field_prop_shortname = None
-        field_prop_savremove = None # SavRemove
-        field_prop_value = None
-        for prop_name, prop_value in category_record['properties'].items():
-            if sanitize_item_name(prop_name)==sanitize_item_name('shortname'):
-                field_prop_shortname = prop_value
-            if sanitize_item_name(prop_name)==sanitize_item_name('savremove'):
-                field_prop_savremove = prop_value
-            if sanitize_item_name(prop_name)==sanitize_item_name('value'):
-                field_prop_value = prop_value
-        if field_prop_value is not None:
-            try:
-                field_prop_value = float(field_prop_value)
-                if abs(field_prop_value-round(field_prop_value))<0.001:
-                    field_prop_value = int(round(field_prop_value))
-                    field_prop_value = '{s}'.format(s=field_prop_value)
-            except:
-                pass
-        # if field_prop_shortname:
-        if True:
-            category_record['properties']['ShortName'] = field_prop_shortname
-        if field_prop_savremove:
-            category_record['properties']['SavRemove'] = field_prop_savremove
-        if True:
-            category_record['properties']['Value'] = field_prop_value
+    category_records = normalize_properties_category_records(category_records)
  
     rows = map_df.index
     print('categories sheet, filling the map...')
@@ -772,8 +869,8 @@ def fill_categories(map_df,mdd_scheme):
                 else:
                     # keep default value from original flatout map
                     pass
-                if 'punch' in map_result:
-                    map_df.loc[row,columns_last_6[3]] = map_result['punch']
+                if 'value' in map_result:
+                    map_df.loc[row,columns_last_6[3]] = map_result['value']
                 else:
                     # reset
                     map_df.loc[row,columns_last_6[3]] = ''
@@ -887,6 +984,8 @@ def entry_point(runscript_config={}):
         print("\n"+'Reading Excel "{file}"...'.format(file=inp_map_filename))
         # header=2 means how many rows to skip above the banner line
         # , index_col='Index' is a possible param but we probably don't need it
+        # and ",keep_default_na=False" is needed to address pandas bug (or maybe openpyxl bug, idk) that converts "None" (text) to nothing
+        # maybe I'll report it but first I should find the root where it happens and also check if it was already reported, it's really hard to search for word "None" within thousands of submitted issues
         df_inp_map_variables = pd.read_excel(inp_map_filename, sheet_name='variables',header=2,keep_default_na=False,engine='openpyxl').fillna("")
         df_inp_map_categories = pd.read_excel(inp_map_filename, sheet_name='cats by vars',header=2,keep_default_na=False,engine='openpyxl').fillna("")
         print("\n"+'Reading Excel successful')
