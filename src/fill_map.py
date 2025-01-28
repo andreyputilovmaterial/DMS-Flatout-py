@@ -614,18 +614,39 @@ def fill_variables(map_df,mdd_scheme):
                     raise Exception('Last 7 columns on \'variables\' sheet should include words ">>>", "include", "excelude", "name"... This test was not passed. Exiting.')
                 if 'include' in map_result:
                     map_df.loc[row,columns_last_7[1]] = map_result['include']
+                else:
+                    # keep default value from original flatout map
+                    pass
                 if 'exclude' in map_result:
                     map_df.loc[row,columns_last_7[2]] = map_result['exclude']
+                else:
+                    # keep default value from original flatout map
+                    pass
                 if 'name' in map_result:
                     map_df.loc[row,columns_last_7[3]] = map_result['name']
+                else:
+                    # keep default value from original flatout map
+                    pass
                 if 'label' in map_result:
                     map_df.loc[row,columns_last_7[4]] = map_result['label']
+                else:
+                    # keep default value from original flatout map
+                    pass
                 if 'format' in map_result:
                     map_df.loc[row,columns_last_7[5]] = map_result['format']
+                else:
+                    # keep default value from original flatout map
+                    pass
                 if 'markup' in map_result:
                     map_df.loc[row,columns_last_7[6]] = map_result['markup']
+                else:
+                    # keep default value from original flatout map
+                    pass
                 if 'comment' in map_result and map_result['comment']:
                     map_df.loc[row,columns_last_7[0]] = '>>>>>>>>' + ' ' + map_result['comment']
+                else:
+                    # keep default value from original flatout map
+                    pass
 
         except Exception as e:
             # something failed? alert which was the last row, and throw the exception back
@@ -743,16 +764,34 @@ def fill_categories(map_df,mdd_scheme):
                     raise Exception('Last 6 columns on \'variables\' sheet should include words ">>>", "include", "excelude", "name"... This test was not passed. Exiting.')
                 if 'include' in map_result:
                     map_df.loc[row,columns_last_6[1]] = map_result['include']
+                else:
+                    # keep default value from original flatout map
+                    pass
                 if 'exclude' in map_result:
                     map_df.loc[row,columns_last_6[2]] = map_result['exclude']
+                else:
+                    # keep default value from original flatout map
+                    pass
                 if 'punch' in map_result:
                     map_df.loc[row,columns_last_6[3]] = map_result['punch']
+                else:
+                    # reset
+                    map_df.loc[row,columns_last_6[3]] = ''
                 if 'label' in map_result:
                     map_df.loc[row,columns_last_6[4]] = map_result['label']
+                else:
+                    # keep default value from original flatout map
+                    pass
                 if 'markup' in map_result:
                     map_df.loc[row,columns_last_6[5]] = map_result['markup']
+                else:
+                    # keep default value from original flatout map
+                    pass
                 if 'comment' in map_result and map_result['comment']:
                     map_df.loc[row,columns_last_6[0]] = '>>>>>>>>' + ' ' + map_result['comment']
+                else:
+                    # keep default value from original flatout map
+                    pass
 
         except Exception as e:
             # something failed? alert which was the last row, and throw the exception back
@@ -848,8 +887,8 @@ def entry_point(runscript_config={}):
         print("\n"+'Reading Excel "{file}"...'.format(file=inp_map_filename))
         # header=2 means how many rows to skip above the banner line
         # , index_col='Index' is a possible param but we probably don't need it
-        df_inp_map_variables = pd.read_excel(inp_map_filename, sheet_name='variables',header=2,engine='openpyxl').fillna("")
-        df_inp_map_categories = pd.read_excel(inp_map_filename, sheet_name='cats by vars',header=2,engine='openpyxl').fillna("")
+        df_inp_map_variables = pd.read_excel(inp_map_filename, sheet_name='variables',header=2,keep_default_na=False,engine='openpyxl').fillna("")
+        df_inp_map_categories = pd.read_excel(inp_map_filename, sheet_name='cats by vars',header=2,keep_default_na=False,engine='openpyxl').fillna("")
         print("\n"+'Reading Excel successful')
     
     result_variables_df = fill_variables(df_inp_map_variables,inp_mdd_scheme)
