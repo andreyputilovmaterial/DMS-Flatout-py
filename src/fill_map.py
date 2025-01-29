@@ -208,6 +208,32 @@ def detect_item_type_from_mdddata_fields_report(item_name):
 
 
 
+# the main goal - strip html tags
+# I know, in python, we have better ways than just using raw regex
+# but I am using the same what is used in dms scripts
+# my goal is just to replicate the same logic
+def sanitize_label(t):
+    if t==0:
+        return '0'
+    if not t:
+        return ''
+    t = '{t}'.format(t=t)
+    t = t.replace('&amp;','&')
+    t = re.sub(r'<(.|\n)+?>','',t,flags=re.I|re.DOTALL)
+    t = re.sub(r'^\s*','',re.sub(r'\s*$','',t,flags=re.I|re.DOTALL),flags=re.I|re.DOTALL)
+    return t
+
+def sanitize_variable_label(t):
+    return sanitize_label(t)
+
+def sanitize_category_label(t):
+    t = sanitize_label(t)
+    if ',' in t:
+        t = '\'{t}\''.format(t=t)
+    return t
+
+
+
 
 
 
@@ -617,7 +643,7 @@ def process_row_variable(map_data,variable_record,variable_records):
                             # raise Exception('levels check was not passes, detected {a} when iterating in mdd but int the map it\'s {b}'.format(a=levels_count,b=map_data['Level']))
                             result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'WARNING: levels check mismatch, adding level L{d} but the column Question L{d} is blank ({q})'.format(d=d,q=map_data['Question L{d}'.format(d=d)])
                 for d in [m for m in field_levels if m!=0]:
-                    result_field_label = '{{L{d}}} : '.format(d=d) + result_field_label
+                    result_field_label = '{{L{d}}}{sep}{rest}'.format(d=d,rest=result_field_label,sep=(' : ' if d==[m for m in field_levels if m!=0][0] else ', '))
                     levels_count = levels_count + 1
                     if d<=2:
                         if not(map_data['Question L{d}'.format(d=d)]):
@@ -635,7 +661,7 @@ def process_row_variable(map_data,variable_record,variable_records):
         'include': result_field_include,
         'exclude': result_field_exclude,
         'name': result_field_name,
-        'label': result_field_label,
+        'label': sanitize_variable_label(result_field_label),
         'format': result_field_format,
         'markup': result_field_markup,
     }
@@ -643,17 +669,21 @@ def process_row_variable(map_data,variable_record,variable_records):
 
 
 def process_row_category(map_data,category_record,variable_records):
-    analysis_value = category_record['properties']['Value']
+    category_analysis_value = category_record['properties']['Value']
     try:
-        analysis_value = float(analysis_value)
-        if abs(round(analysis_value)-analysis_value)<CONFIG_ANALYSISVALUE_CHECK_IF_WHOLE_ERROR:
+        category_analysis_value = float(category_analysis_value)
+        if abs(round(category_analysis_value)-category_analysis_value)<CONFIG_ANALYSISVALUE_CHECK_IF_WHOLE_ERROR:
             # if it's close enough to rounded whole
-            analysis_value = int(round(analysis_value))
+            category_analysis_value = int(round(category_analysis_value))
     except:
         pass
-    return {
-        'value': analysis_value,
+    category_label = sanitize_category_label(category_record['label'])
+    result = {
+        'value': category_analysis_value,
     }
+    if not(category_label==category_record['label']):
+        result['label'] = category_label
+    return result
 
 
 
