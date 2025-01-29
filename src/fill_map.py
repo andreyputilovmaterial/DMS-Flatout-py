@@ -598,7 +598,7 @@ def process_row_variable(map_data,variable_record,variable_records):
                     # note I added similar marker to "aa_logic-replicate", so it's now program-wide
                     if not '<@>' in result_field_name:
                         result_field_name = result_field_name + '<@>'
-                    result_field_name = result_field_name.replace('<@>','_[L{d}z3]<@>'.format(d=d))
+                    result_field_name = result_field_name.replace('<@>','<@>_[L{d}z3]'.format(d=d))
                     levels_count = levels_count + 1
                     if d<=2:
                         if not(map_data['Question L{d}'.format(d=d)]):
@@ -617,7 +617,7 @@ def process_row_variable(map_data,variable_record,variable_records):
                             # raise Exception('levels check was not passes, detected {a} when iterating in mdd but int the map it\'s {b}'.format(a=levels_count,b=map_data['Level']))
                             result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'WARNING: levels check mismatch, adding level L{d} but the column Question L{d} is blank ({q})'.format(d=d,q=map_data['Question L{d}'.format(d=d)])
                 for d in [m for m in field_levels if m!=0]:
-                    result_field_label = '{{L{d}}}: '.format(d=d) + result_field_label
+                    result_field_label = '{{L{d}}} : '.format(d=d) + result_field_label
                     levels_count = levels_count + 1
                     if d<=2:
                         if not(map_data['Question L{d}'.format(d=d)]):
