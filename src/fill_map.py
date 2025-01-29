@@ -625,6 +625,11 @@ def process_row_variable(map_data,variable_record,variable_records):
                             result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'WARNING: levels check mismatch, adding level L{d} but the column Question L{d} is blank ({q})'.format(d=d,q=map_data['Question L{d}'.format(d=d)])
 
     assert (not not result_field_name)==(not not result_field_include)
+    if result_field_name and not result_field_label:
+        # flatout is generating the word "nan" if label is blank
+        # that's funny, we can't leave an empty string
+        # ok, I will use variable name as a label
+        result_field_label = result_field_name
     return {
         'comment': result_field_comment,
         'include': result_field_include,
