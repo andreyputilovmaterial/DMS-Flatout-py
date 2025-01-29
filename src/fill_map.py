@@ -227,10 +227,11 @@ def sanitize_variable_label(t):
     return sanitize_label(t)
 
 def sanitize_category_label(t):
-    t = sanitize_label(t)
-    if ',' in t:
-        t = '\'{t}\''.format(t=t)
-    return t
+    return sanitize_label(t)
+    # t = sanitize_label(t)
+    # if ',' in t:
+    #     t = '\'{t}\''.format(t=t)
+    # return t
 
 
 
@@ -643,6 +644,14 @@ def process_row_variable(map_data,variable_record,variable_records):
                             # raise Exception('levels check was not passes, detected {a} when iterating in mdd but int the map it\'s {b}'.format(a=levels_count,b=map_data['Level']))
                             result_field_comment = ( result_field_comment + '; ' if result_field_comment else '' ) + 'WARNING: levels check mismatch, adding level L{d} but the column Question L{d} is blank ({q})'.format(d=d,q=map_data['Question L{d}'.format(d=d)])
                 for d in [m for m in field_levels if m!=0]:
+                    # TODO:
+                    # AA logic is the following:
+                    # if category is inserted before question name (it's not L0, it's of any higher level)
+                    # and it has a comma (",") in its label,
+                    # then this part is enclosed with single quotes
+                    # it does not apply to ALL categories - categories as normal stubs or categories coming as L0 (that become parts of a multi-punch variable) should not have these single quotes added
+                    # but categories of loops should!
+                    # I know, I'll update process_row_category()
                     result_field_label = '{{L{d}}}{sep}{rest}'.format(d=d,rest=result_field_label,sep=(' : ' if d==[m for m in field_levels if m!=0][0] else ', '))
                     levels_count = levels_count + 1
                     if d<=2:
@@ -677,11 +686,18 @@ def process_row_category(map_data,category_record,variable_records):
             category_analysis_value = int(round(category_analysis_value))
     except:
         pass
+    category_level = None
+    if 'variable' in category_record and category_record['variable']:
+        if 'level' in category_record['variable'] and category_record['variable']['level']:
+            category_level = category_record['variable']['level']
     category_label = sanitize_category_label(category_record['label'])
+    if category_level and category_level>0:
+        if ',' in category_label:
+            category_label = '{open}{t}{close}'.format(open='\'',close='\'',t=category_label)
     result = {
         'value': category_analysis_value,
     }
-    if not(category_label==category_record['label']):
+    if not(category_label==map_data['Label']):
         result['label'] = category_label
     return result
 
@@ -712,7 +728,7 @@ def fill_variables(map_df,mdd_scheme):
     print('iterating over rows...')
     performance_counter = iter(helper_utility_performancemonitor.PerformanceMonitor(config={
         'total_records': len(rows),
-        'report_frequency_records_count': 1,
+        'report_frequency_records_count': 25,
         'report_frequency_timeinterval': 9,
         'report_text_pipein': 'filling up variables map',
     }))
@@ -813,17 +829,23 @@ def fill_variables(map_df,mdd_scheme):
     print("Finished!")
     return map_df
 
+
 def fill_categories(map_df,mdd_scheme):
     print("Working on the map: categories...")
     
     print("Normalizing property format from MDD read...")
     mdd_data_records = get_mdd_data_records_from_input_data(mdd_scheme)
-    # mdd_data_root = [ field for field in mdd_data_records if field['name']=='' ][0]
-    # mdd_data_questions = [ field for field in mdd_data_records if detect_item_type_from_mdddata_fields_report(field['name'])=='variable' ]
+    mdd_data_root = [ field for field in mdd_data_records if field['name']=='' ][0]
+    mdd_data_questions = [ field for field in mdd_data_records if detect_item_type_from_mdddata_fields_report(field['name'])=='variable' ]
     mdd_data_categories = [ cat for cat in mdd_data_records if detect_item_type_from_mdddata_fields_report(cat['name'])=='category' ]
-    # variable_records = prepare_variable_records(mdd_data_questions,mdd_data_categories)
+    variable_records = prepare_variable_records(mdd_data_questions,mdd_data_categories,mdd_data_root)
     category_records = {}
     for cat in mdd_data_categories:
+        q_name, cat_name = extract_category_name(cat['name'])
+        q = variable_records[sanitize_item_name(q_name)]
+        cat['name_category'] = cat_name
+        cat['name_variable'] = q_name
+        cat['variable'] = q
         category_records[sanitize_item_name(cat['name'])] = cat
 
     # we'll normalize shortname property name
@@ -834,16 +856,19 @@ def fill_categories(map_df,mdd_scheme):
     print('iterating over rows...')
     performance_counter = iter(helper_utility_performancemonitor.PerformanceMonitor(config={
         'total_records': len(rows),
-        'report_frequency_records_count': 1,
+        'report_frequency_records_count': 35,
         'report_frequency_timeinterval': 9,
         'report_text_pipein': 'filling up categories map',
     }))
+    last_processing_item = None
     for row in rows:
         variable_name = map_df.loc[row,'Variable']
         category_name = map_df.loc[row,'Category']
         item_name = '{variable_name}.Categories[{cat_name}]'.format(variable_name=variable_name,cat_name=category_name)
         processing_last_item = item_name
-        print('processing {s}...'.format(s=processing_last_item))
+        if not(variable_name==last_processing_item):
+            print('processing categories of {s}...'.format(s=variable_name))
+        last_processing_item = variable_name
         next(performance_counter)
         try:
             map_result = {}
@@ -867,7 +892,7 @@ def fill_categories(map_df,mdd_scheme):
                     # variable_record = variable_records[variable_mdd_scheme_name_clean]
                     category_record = category_records[variable_mdd_scheme_name_clean] if variable_mdd_scheme_name_clean in category_records else None
                     if category_record:
-                        map_result = process_row_category(map_data,category_record,None)
+                        map_result = process_row_category(map_data,category_record,variable_records)
                     else:
                         map_result['comment'] ='Error: category not found in mdd scheme!'
                 else:
