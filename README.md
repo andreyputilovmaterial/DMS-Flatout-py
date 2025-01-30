@@ -6,7 +6,7 @@ Download files from the latest Release page:
 
 To get it started, just edit the BAT file and insert the name of your map.
 
-Apply AA on your MDD first!!!
+If you need to repeat the structure of AA-generated SPSS, apply AA on your MDD now.
 
 Then, start the BAT file. As a result, it will generate:
 `mdd_map_R123456.xlsx_filled_with_script.xlsx`
