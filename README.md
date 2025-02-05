@@ -1,5 +1,11 @@
-# map-flatout-prefill
+# DMS-Flatout-Py
 Python script that helps you pre-fill flatout map.
+
+It can:
+- pre-fill Flatout map simialar to what was used in old days with AA, having shortnames filled, and [L0z3]-[L2z3] inserts for numeric codes for iterations
+- pre-fill Flatout map so that it replicates AA definitions, if AA was applied on MDD when this tool is started
+- Apply Flatout map on MDD so that you can use 601_SavPrep and 602_SavCreate but have definitions ina  Flatout map
+Note, this all was done entirely for fun. Not certified for real projects.
 
 Download files from the latest Release page:
 [Releases](../../releases/latest)

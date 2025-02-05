@@ -10,19 +10,19 @@ import traceback
 
 if __name__ == '__main__':
     # run as a program
-    from lib.mdmreadpy import read_mdd
-    from lib.mdmreadpy.lib.mdmreportpy import report_create
-    import fill_map
+    from lib.mdmreadpy import read_mdd as prog_read_mdd
+    from lib.mdmreadpy.lib.mdmreportpy import report_create as prog_report_create
+    import prog_prefill_flatout
 elif '.' in __name__:
     # package
-    from .lib.mdmreadpy import read_mdd
-    from .lib.mdmreadpy.lib.mdmreportpy import report_create
-    from . import fill_map
+    from .lib.mdmreadpy import read_mdd as prog_read_mdd
+    from .lib.mdmreadpy.lib.mdmreportpy import report_create as prog_report_create
+    from . import prog_prefill_flatout
 else:
     # included with no parent package
-    from lib.mdmreadpy import read_mdd
-    from lib.mdmreadpy.lib.mdmreportpy import report_create
-    import fill_map
+    from lib.mdmreadpy import read_mdd as prog_read_mdd
+    from lib.mdmreadpy.lib.mdmreportpy import report_create as prog_report_create
+    import prog_prefill_flatout
 
 
 
@@ -30,13 +30,13 @@ else:
 
 
 def call_read_mdd_program():
-    return read_mdd.entry_point({'arglist_strict':False})
+    return prog_read_mdd.entry_point({'arglist_strict':False})
 
 def call_report_program():
-    return report_create.entry_point({'arglist_strict':False})
+    return prog_report_create.entry_point({'arglist_strict':False})
 
-def call_fill_map_program():
-    return fill_map.entry_point({'arglist_strict':False})
+def call_prog_prefill_flatout_program():
+    return prog_prefill_flatout.entry_point({'arglist_strict':False})
 
 
 
@@ -46,7 +46,7 @@ def call_fill_map_program():
 run_programs = {
     'read_mdd': call_read_mdd_program,
     'report': call_report_program,
-    'fill-map': call_fill_map_program,
+    'fill-map': call_prog_prefill_flatout_program,
 }
 
 

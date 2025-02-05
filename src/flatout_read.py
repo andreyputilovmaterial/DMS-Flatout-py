@@ -1,29 +1,81 @@
-from datetime import datetime, timezone
-import argparse
-from pathlib import Path
-import json, re
-import pandas as pd
+
+
+import re
 
 
 
 
-if __name__ == '__main__':
-    # run as a program
-    import helper_utility_performancemonitor
-    import aa_logic_replicate
-elif '.' in __name__:
-    # package
-    from . import helper_utility_performancemonitor
-    from . import aa_logic_replicate
-else:
-    # included with no parent package
-    import helper_utility_performancemonitor
-    import aa_logic_replicate
+
+
+
+
+
+
+
+
+
+
+
+class FlatoutMap:
+    def __init__(self,df):
+        pass
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# if __name__ == '__main__':
+#     # run as a program
+#     import helper_utility_performancemonitor
+#     import aa_logic_replicate
+# elif '.' in __name__:
+#     # package
+#     from . import helper_utility_performancemonitor
+#     from . import aa_logic_replicate
+# else:
+#     # included with no parent package
+#     import helper_utility_performancemonitor
+#     import aa_logic_replicate
 
 
 
 
 CONFIG_ANALYSISVALUE_CHECK_IF_WHOLE_ERROR = 0.0001
+
+
+
+
+
+
+
 
 CONFIG_MAP_DATA_VARIABLE_FIELDS = [
 	'Variable',
@@ -70,36 +122,6 @@ CONFIG_MAP_DATA_CATEGORY_FIELDS = [
 
 
 
-CONFIG_KNOWN_SYSTEM_FIELDS = {
-    'Respondent.': { '_': 'Respondent.', 'include': '', 'exclude': '', 'name': '', 'label': '', 'format': '', 'markup': '', },
-    'Respondent.Serial': { '_': 'Respondent.Serial', 'include': 'x', 'exclude': '', 'name': 'Respondent_Serial', 'label': '', 'format': '', 'markup': '', },
-    'Respondent.ID': { '_': 'Respondent.ID', 'include': 'x', 'exclude': '', 'name': 'Respondent_ID', 'label': '', 'format': '', 'markup': 'id', },
-    'DataCollection.': { '_': 'DataCollection.', 'include': '', 'exclude': '', 'name': '', 'label': '', 'format': '', 'markup': '', },
-    'DataCollection.Status': { '_': 'DataCollection.Status', 'include': 'x', 'exclude': '', 'name': 'DataCollection_Status[L0]', 'label': 'Status - {L0}', 'format': '', 'markup': '', },
-    'DataCollection.StartTime': { '_': 'DataCollection.StartTime', 'include': 'x', 'exclude': '', 'name': 'DataCollection_StartTime', 'label': 'Interview start time', 'format': '', 'markup': '', },
-    'DataCollection.FinishTime': { '_': 'DataCollection.FinishTime', 'include': 'x', 'exclude': '', 'name': 'DataCollection_FinishTime', 'label': 'Interview finish time', 'format': '', 'markup': '', },
-    'DataCollection.Removed': { '_': 'DataCollection.Removed', 'include': '', 'exclude': '', 'name': '', 'label': '', 'format': '', 'markup': '', },
-    'DataCollection.InterviewMode': { '_': 'DataCollection.InterviewMode', 'include': 'x', 'exclude': '', 'name': 'DataCollection_InterviewMode', 'label': 'Interview Mode', 'format': '', 'markup': '', },
-    'QuotaDaily': { '_': 'QuotaDaily', 'include': 'x', 'exclude': '', 'name': '', 'label': 'QuotaDaily', 'format': '', 'markup': '', },
-    'QuotaMonthly': { '_': 'QuotaMonthly', 'include': 'x', 'exclude': '', 'name': '', 'label': 'QuotaMonthly', 'format': '', 'markup': '', },
-    'QuotaYearly': { '_': 'QuotaYearly', 'include': 'x', 'exclude': '', 'name': '', 'label': 'QuotaYearly', 'format': '', 'markup': '', },
-    'CensusRegion': { '_': 'CensusRegion', 'include': 'x', 'exclude': '', 'name': '', 'label': 'CensusRegion', 'format': '', 'markup': '', },
-    'PrelimBanner': { '_': 'PrelimBanner', 'include': 'x', 'exclude': '', 'name': '', 'label': 'PrelimBanner', 'format': '', 'markup': '', },
-    'COMP': { '_': 'COMP', 'include': 'x', 'exclude': '', 'name': '', 'label': 'COMP', 'format': '', 'markup': '', },
-    'DelayTermReasons': { '_': 'DelayTermReasons', 'include': 'x', 'exclude': '', 'name': 'DelayTermReasons_[L0z3]', 'label': 'DelayTermReasons - {L0}', 'format': '', 'markup': '', },
-    'CompletedScreener': { '_': 'CompletedScreener', 'include': 'x', 'exclude': '', 'name': '', 'label': 'CompletedScreener', 'format': '', 'markup': '', },
-    'WeightingStatus': { '_': 'WeightingStatus', 'include': 'x', 'exclude': '', 'name': 'WeightingStatus_[L0z3]', 'label': 'WeightingStatus - {L0}', 'format': '', 'markup': '', },
-    'QCData.': { '_': 'QCData.', 'include': '', 'exclude': '', 'name': '', 'label': '', 'format': '', 'markup': '', },
-    'QCData.ErrorMsg': { '_': 'QCData.ErrorMsg', 'include': '', 'exclude': '', 'name': '', 'label': '', 'format': '', 'markup': '', },
-    'QCData.Flags': { '_': 'QCData.Flags', 'include': 'x', 'exclude': '', 'name': 'QCFlags_[L0z3]', 'label': 'QCData.Flags - {L0}', 'format': '', 'markup': '', },
-    'QCData.Number': { '_': 'QCData.Number', 'include': 'x', 'exclude': '', 'name': 'QCFlagCount', 'label': 'QCData.Number', 'format': '', 'markup': '', },
-    'USLocationData.': { '_': 'USLocationData.', 'include': '', 'exclude': '', 'name': '', 'label': '', 'format': '', 'markup': '', },
-    'USLocationData.Zip': { '_': 'USLocationData.Zip', 'include': 'x', 'exclude': '', 'name': 'USLoc_Zip', 'label': 'USLocationData.Zip', 'format': '', 'markup': '', },
-    'USLocationData.State': { '_': 'USLocationData.State', 'include': 'x', 'exclude': '', 'name': 'USLoc_State', 'label': 'USLocationData.State', 'format': '', 'markup': '', },
-    'USLocationData.CensusRegion': { '_': 'USLocationData.CensusRegion', 'include': 'x', 'exclude': '', 'name': 'USLoc_Region', 'label': 'USLocationData.CensusRegion', 'format': '', 'markup': '', },
-    'USLocationData.NielsenDMAText': { '_': 'USLocationData.NielsenDMAText', 'include': 'x', 'exclude': '', 'name': 'USLoc_NielsenDMA', 'label': 'USLocationData.NielsenDMAText', 'format': '', 'markup': '', },
-    'USLocationData.NielsenCountySize': { '_': 'USLocationData.NielsenCountySize', 'include': 'x', 'exclude': '', 'name': 'USLoc_NielsenCountySize', 'label': 'USLocationData.NielsenCountySize', 'format': '', 'markup': '', },
-}
 
 
 
@@ -959,107 +981,3 @@ def fill_categories(map_df,mdd_scheme):
 
 
 
-def entry_point(runscript_config={}):
-
-    time_start = datetime.now()
-    script_name = 'mdttolsap-fill-pailess-map script'
-
-    parser = argparse.ArgumentParser(
-        description="Pre-fills flatout map",
-        prog='mdd-patch'
-    )
-    parser.add_argument(
-        '-1',
-        '--inp-mdd-scheme',
-        type=str,
-        help='JSON with fields data from MDD Input File',
-        required=True
-    )
-    parser.add_argument(
-        '-2',
-        '--map',
-        type=str,
-        help='The Flatout Map',
-        required=True
-    )
-    parser.add_argument(
-        '--output-filename',
-        help='Set preferred output file name, with path',
-        type=str,
-        required=False
-    )
-    args = None
-    args_rest = None
-    if( ('arglist_strict' in runscript_config) and (not runscript_config['arglist_strict']) ):
-        args, args_rest = parser.parse_known_args()
-    else:
-        args = parser.parse_args()
-    
-    inp_mddscheme_filename = ''
-    if args.inp_mdd_scheme:
-        inp_mddscheme_filename = Path(args.inp_mdd_scheme)
-        inp_mddscheme_filename = '{inp_mddscheme_filename}'.format(inp_mddscheme_filename=inp_mddscheme_filename.resolve())
-    else:
-        raise FileNotFoundError('Inp source: file not provided; please use --inp-mdd-scheme option')
-
-    inp_map_filename = ''
-    if args.map:
-        inp_map_filename = Path(args.map)
-        inp_map_filename = '{inp_map_filename}'.format(inp_map_filename=inp_map_filename.resolve())
-    else:
-        raise FileNotFoundError('Inp source: file not provided; please use --map option')
-
-    config = {}
-
-    # report_part_filename = re.sub( r'\.json\s*?$', '', Path(inp_mddscheme_filename).name )
-    result_final_fname = None
-    if args.output_filename:
-        result_final_fname = Path(args.output_filename)
-    else:
-        raise FileNotFoundError('Inp source: file not provided; please use --output-filename')
-    
-
-    if not(Path(inp_mddscheme_filename).is_file()):
-        raise FileNotFoundError('file not found: {fname}'.format(fname=inp_mddscheme_filename))
-    if not(Path(inp_map_filename).is_file()):
-        raise FileNotFoundError('file not found: {fname}'.format(fname=inp_map_filename))
-
-    print('{script_name}: script started at {dt}'.format(dt=time_start,script_name=script_name))
-
-    inp_mdd_scheme = None
-    with open(inp_mddscheme_filename) as f_l:
-        try:
-            inp_mdd_scheme = json.load(f_l)
-        except json.JSONDecodeError as e:
-            # just a more descriptive message to the end user
-            # can happen if the tool is started two times in parallel and it is writing to the same json simultaneously
-            raise TypeError('Patch: Can\'t read left file as JSON: {msg}'.format(msg=e))
-    
-    df_inp_map_variables = None
-    df_inp_map_categories = None
-    with open(inp_map_filename) as f_l:
-        df_inp_map_variables = None
-        print("\n"+'Reading Excel "{file}"...'.format(file=inp_map_filename))
-        # header=2 means how many rows to skip above the banner line
-        # , index_col='Index' is a possible param but we probably don't need it
-        # and ",keep_default_na=False" is needed to address pandas bug (or maybe openpyxl bug, idk) that converts "None" (text) to nothing
-        # maybe I'll report it but first I should find the root where it happens and also check if it was already reported, it's really hard to search for word "None" within thousands of submitted issues
-        df_inp_map_variables = pd.read_excel(inp_map_filename, sheet_name='variables',header=2,keep_default_na=False,engine='openpyxl').fillna("")
-        df_inp_map_categories = pd.read_excel(inp_map_filename, sheet_name='cats by vars',header=2,keep_default_na=False,engine='openpyxl').fillna("")
-        print("\n"+'Reading Excel successful')
-    
-    result_variables_df = fill_variables(df_inp_map_variables,inp_mdd_scheme)
-    result_categories_df = fill_categories(df_inp_map_categories,inp_mdd_scheme)
-
-    print('{script_name}: saving as "{fname}"'.format(fname=result_final_fname,script_name=script_name))
-    with pd.ExcelWriter(result_final_fname) as writer:
-        result_variables_df.to_excel(writer, sheet_name='variables')
-        result_categories_df.to_excel(writer, sheet_name='cats by vars')
-
-    time_finish = datetime.now()
-    print('{script_name}: finished at {dt} (elapsed {duration})'.format(dt=time_finish,duration=time_finish-time_start,script_name=script_name))
-
-
-
-if __name__ == '__main__':
-    entry_point({'arglist_strict':True})

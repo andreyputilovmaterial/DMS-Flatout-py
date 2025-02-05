@@ -9,6 +9,18 @@ import re
 
 
 
+if __name__ == '__main__':
+    # run as a program
+    import util_var_functions
+elif '.' in __name__:
+    # package
+    from . import util_var_functions
+else:
+    # included with no parent package
+    import util_var_functions
+
+
+
 def check_val_txt_true(value_assess):
     # return re.match(r'^\s*?(?:true)\s*?$',value_assess,flags=re.I|re.DOTALL)
     return check_val_txt(value_assess,'true')
@@ -22,27 +34,6 @@ def check_val_txt(value_assess,value_compare):
         s = s.lower()
         return s
     return sanitize(value_assess)==sanitize(value_compare)
-
-def trim_dots(s):
-    return re.sub(r'^\s*?\.','',re.sub(r'\.\s*?$','',s,flags=re.I),flags=re.I)
-
-def sanitize_item_name(item_name):
-    return re.sub(r'\s*$','',re.sub(r'^\s*','',re.sub(r'\s*([\[\{\]\}\.])\s*',lambda m:'{m}'.format(m=m[1]),item_name,flags=re.I))).lower()
-
-def extract_field_name(item_name):
-    m = re.match(r'^\s*((?:\w.*?\.)*)(\w+)\s*$',item_name,flags=re.I)
-    if m:
-        return re.sub(r'\s*\.\s*$','',m[1]),m[2]
-    else:
-        raise ValueError('Can\'t extract field name from "{s}"'.format(s=item_name))
-
-def extract_category_name(item_name):
-    m = re.match(r'^\s*(\w+.*?\w)\.(?:categories|elements)\s*?\[\s*?\{?\s*?(\w+)\s*?\}?\s*?\]\s*$',item_name,flags=re.I)
-    if m:
-        return trim_dots(m[1]), trim_dots(m[2])
-    else:
-        raise ValueError('Can\'t extract category name from "{s}"'.format(s=item_name))
-
 
 
 
@@ -63,7 +54,7 @@ def extract_category_name(item_name):
 def should_process_short_name(record):
     # If (question.IsSystem) Or (question.DataType = DataTypeConstants.mtNone) Or (question.HasCaseData = False) Or (question.Properties(S_CUSTOM_PROPERTY_REMOVE_VARIABLE) = True) Then
     if (
-           ( 'is_system' in record['attributes'] and check_val_txt_true(record['attributes']['system']) )
+           ( 'is_system' in record['attributes'] and check_val_txt_true(record['attributes']['is_system']) )
         or ( 'data_type' in record['attributes'] and check_val_txt(record['attributes']['data_type'],'0') )
         or ( 'has_case_data' in record['attributes'] and check_val_txt(record['attributes']['has_case_data'],'false') )
         or ( 'SavRemove' in record['properties'] and check_val_txt_true(record['properties']['SavRemove']) )
@@ -105,8 +96,8 @@ def check_is_numeric_grid(record):
         for child_record in record['fields']:
             if check_val_txt(child_record['attributes']['object_type_value'],'1'):
                 result = False # this is not entirely clear to me but I am trying to replicate older logic; why are we only checking for nested loops but not other types?
-            _, field_name = extract_field_name(child_record['name'])
-            if sanitize_item_name(field_name)=='dummy':
+            _, field_name = util_var_functions.extract_field_name(child_record['name'])
+            if util_var_functions.sanitize_item_name(field_name)=='dummy':
                 continue # this is also not entirely clear; if we have a loop with the only "dummy" field it will be classified as numeric grid? really?
             if check_val_txt(child_record['attributes']['object_type_value'],'0'):
                 if check_val_txt(child_record['attributes']['data_type'],'1') or check_val_txt(child_record['attributes']['data_type'],'6'):
@@ -154,8 +145,8 @@ def check_is_text_grid(record):
             if check_val_txt(child_record['attributes']['object_type_value'],'1'):
                 result = False # still not clear, see comment in check_is_numeric_grid
             else:
-                _, field_name = extract_field_name(child_record['name'])
-                if sanitize_item_name(field_name)=='dummy':
+                _, field_name = util_var_functions.extract_field_name(child_record['name'])
+                if util_var_functions.sanitize_item_name(field_name)=='dummy':
                     continue # this is also not entirely clear; if we have a loop with the only "dummy" field it will be classified as numeric grid? really?
                 if check_val_txt(child_record['attributes']['object_type_value'],'0'):
                     if check_val_txt(child_record['attributes']['data_type'],'2'):
@@ -240,8 +231,8 @@ def check_is_categorical_grid(record):
     def should_skip(field_record):
         if 'data_type' in field_record['attributes'] and check_val_txt(field_record['attributes']['data_type'],'0'):
             return True
-        _, field_name = extract_field_name(field_record['name'])
-        if sanitize_item_name(field_name)=='dummy':
+        _, field_name = util_var_functions.extract_field_name(field_record['name'])
+        if util_var_functions.sanitize_item_name(field_name)=='dummy':
             return True
         return False
     result = False
@@ -294,30 +285,30 @@ def replicate_read_shortnames_logic(record):
         assert record['attributes']['object_type_value']=='0'
         has_parent = not not record['parent']
         if not has_parent:
-            result = trim(record['properties']['ShortName'])
+            result = trim(record['properties']['shortname']) if 'shortname' in record['properties'] else None
             if not result:
-                raise AAFailedFindShortnameException('Failed to find ShortName: {s}'.format(s=record['name']))
+                raise AAFailedFindShortnameException('Failed to find shortname: {s}'.format(s=record['name']))
             return result
         else:
-            if check_is_numeric_or_text_grid(record['parent']):
-                if not re.match(r'^\s*?(\d+)(?:\.0*?)?\s*?$',record['properties']['ShortName']):
-                    raise AAFailedFindShortnameException('Failed to find ShortName: {s}'.format(s=record['name']))
-                result_part1 = trim(record['parent']['properties']['ShortName'])
-                result_part2 = trim(sanitize_numeric_short_name_with_z3(trim(record['properties']['ShortName'])))
+            if 'parent' in record and record['parent'] and not(record['parent']['name']=='') and check_is_numeric_or_text_grid(record['parent']):
+                if not re.match(r'^\s*?(\d+)(?:\.0*?)?\s*?$',record['properties']['shortname']):
+                    raise AAFailedFindShortnameException('Failed to find shortname: {s}'.format(s=record['name']))
+                result_part1 = trim(record['parent']['properties']['shortname'])
+                result_part2 = trim(sanitize_numeric_short_name_with_z3(trim(record['properties']['shortname'])))
                 if not result_part1:
-                    raise AAFailedFindShortnameException('Failed to find ShortName: {s}'.format(s=record['name']))
+                    raise AAFailedFindShortnameException('Failed to find shortname: {s}'.format(s=record['name']))
                 if not result_part2:
-                    raise AAFailedFindShortnameException('Failed to find ShortName: {s}'.format(s=record['name']))
+                    raise AAFailedFindShortnameException('Failed to find shortname: {s}'.format(s=record['name']))
                 return '{p1}{add}{p2}'.format(p1=result_part1,p2=result_part2,add='<@>_')
-            elif check_is_categorical_grid(record['parent']):
-                result = trim(record['parent']['properties']['ShortName'])
+            elif 'parent' in record and record['parent'] and not(record['parent']['name']=='') and check_is_categorical_grid(record['parent']):
+                result = trim(record['parent']['properties']['shortname'])
                 if not result:
-                    raise AAFailedFindShortnameException('Failed to find ShortName: {s}'.format(s=record['name']))
+                    raise AAFailedFindShortnameException('Failed to find shortname: {s}'.format(s=record['name']))
                 return result
             else:
-                result = trim(record['properties']['ShortName'])
+                result = trim(record['properties']['shortname']) if 'shortname' in record['properties'] else None
                 if not result:
-                    raise AAFailedFindShortnameException('Failed to find ShortName: {s}'.format(s=record['name']))
+                    raise AAFailedFindShortnameException('Failed to find shortname: {s}'.format(s=record['name']))
                 return result
     except AAFailedFindShortnameException as e:
         is_helper_field = False
@@ -325,7 +316,7 @@ def replicate_read_shortnames_logic(record):
             is_helper_field = True
         if has_parent and is_helper_field:
             parent_shortname = replicate_read_shortnames_logic(record['parent'])
-            _, field_name = extract_field_name(record['name'])
+            _, field_name = util_var_functions.extract_field_name(record['name'])
             if False:
             # if '<@>' in parent_shortname:
                 # matches = re.match(r'^(.*?)(<@>)(.*?$',parent_shortname,flags=re.I|re.DOTALL)
@@ -333,18 +324,18 @@ def replicate_read_shortnames_logic(record):
                 # result_part2 = trim(matches[3])
                 # result_partiter = trim(field_name)
                 # if not result_part1:
-                #     raise AAFailedFindShortnameException('Failed to find ShortName: {s}'.format(s=record['name']))
+                #     raise AAFailedFindShortnameException('Failed to find shortname: {s}'.format(s=record['name']))
                 # if not result_part2:
-                #     raise AAFailedFindShortnameException('Failed to find ShortName: {s}'.format(s=record['name']))
+                #     raise AAFailedFindShortnameException('Failed to find shortname: {s}'.format(s=record['name']))
                 # return '{p1}{future_iters_add}{iter_add}{p2}'.format(p1=result_part1,p2=result_part2,add='<@>_')
                 pass
             else:
                 result_part1 = trim(parent_shortname)
                 result_part2 = trim(field_name)
                 if not result_part1:
-                    raise AAFailedFindShortnameException('Failed to find ShortName: {s}'.format(s=record['name']))
+                    raise AAFailedFindShortnameException('Failed to find shortname: {s}'.format(s=record['name']))
                 if not result_part2:
-                    raise AAFailedFindShortnameException('Failed to find ShortName: {s}'.format(s=record['name']))
+                    raise AAFailedFindShortnameException('Failed to find shortname: {s}'.format(s=record['name']))
                 return '{p1}{add}{p2}'.format(p1=result_part1,p2=result_part2,add='_')
         else:
             raise e
@@ -380,7 +371,7 @@ def replicate_read_shortnames_logic(record):
 #         #         'Send top-level As well
 #         #         xlCurrentRow = ListAlias(question, False, NumericOrTextGridText, shortNameDict, Application, xlDoc, xlWorksheet, xlCurrentRow)
 #         #         For Each oField In question.Fields
-#         #             xlCurrentRow = ListAlias(oField, True, oField.Properties("ShortName"), shortNameDict, Application, xlDoc, xlWorksheet, xlCurrentRow)
+#         #             xlCurrentRow = ListAlias(oField, True, oField.Properties("shortname"), shortNameDict, Application, xlDoc, xlWorksheet, xlCurrentRow)
 #         #         Next
 #         #     Else
 #         #         'Send top-level As well
@@ -429,14 +420,14 @@ def replicate_read_shortnames_logic(record):
 # #             If Len(NumericOrTextGridText) > 0 Then
 # #                 xlCurrentRow = LogExcelShortNames(Application, xlDoc, xlWorksheet, xlCurrentRow, question, question.FullName, shortname, "NONE", IsNumericOrTextGrid)
 # #             Else
-# #                 xlCurrentRow = LogExcelShortNames(Application, xlDoc, xlWorksheet, xlCurrentRow, question, question.FullName, "", "Missing ShortName Property for Numeric Grid " & question.Name, IsNumericOrTextGrid)
+# #                 xlCurrentRow = LogExcelShortNames(Application, xlDoc, xlWorksheet, xlCurrentRow, question, question.FullName, "", "Missing shortname Property for Numeric Grid " & question.Name, IsNumericOrTextGrid)
 # #             End If
 # #         Else
 # #             'Others
-# #             If (question.Properties("ShortName")) > 1 Then
-# #                 shortname = question.Properties("ShortName")
+# #             If (question.Properties("shortname")) > 1 Then
+# #                 shortname = question.Properties("shortname")
 # #             Else
-# #                 shortname = question.Properties("ShortName", "Question")
+# #                 shortname = question.Properties("shortname", "Question")
 # #             End If
 # #             If question.IsSystem = False Then
 # #                 If Len(shortname) > 0 Then
@@ -512,15 +503,15 @@ def replicate_read_shortnames_logic(record):
 #             # If Len(NumericOrTextGridText) > 0 Then
 #             #     xlCurrentRow = LogExcelShortNames(Application, xlDoc, xlWorksheet, xlCurrentRow, question, question.FullName, shortname, "NONE", IsNumericOrTextGrid)
 #             # Else
-#             #     xlCurrentRow = LogExcelShortNames(Application, xlDoc, xlWorksheet, xlCurrentRow, question, question.FullName, "", "Missing ShortName Property for Numeric Grid " & question.Name, IsNumericOrTextGrid)
+#             #     xlCurrentRow = LogExcelShortNames(Application, xlDoc, xlWorksheet, xlCurrentRow, question, question.FullName, "", "Missing shortname Property for Numeric Grid " & question.Name, IsNumericOrTextGrid)
 #             # End If
 #         else:
 #     #     Else
 #     #         'Others
-#     #         If (question.Properties("ShortName")) > 1 Then
-#     #             shortname = question.Properties("ShortName")
+#     #         If (question.Properties("shortname")) > 1 Then
+#     #             shortname = question.Properties("shortname")
 #     #         Else
-#     #             shortname = question.Properties("ShortName", "Question")
+#     #             shortname = question.Properties("shortname", "Question")
 #     #         End If
 #     #         If question.IsSystem = False Then
 #     #             If Len(shortname) > 0 Then
@@ -560,12 +551,12 @@ def replicate_read_shortnames_logic(record):
 
 
 
-# 'List ShortName information in the Excel
+# 'List shortname information in the Excel
 # 'Will add code here that takes the starting point and iterates and lists the necessary information in the Excel
 # 'It will return the new Row to be used as a pass back
 
 # 'Starting with handling of ShortNames
-# 'Include conditioanl adding of Final_ShortName column (one more to the right) if the ShortName is there
+# 'Include conditioanl adding of Final_ShortName column (one more to the right) if the shortname is there
 # Function LogExcelShortNames(Application, xlDoc, xlWorksheet, xlStartRow, question, QuestionName, shortname, Description, IsNumericOrTextGrid)
 #     Dim xlCurrentRow
 #     xlCurrentRow = xlStartRow
