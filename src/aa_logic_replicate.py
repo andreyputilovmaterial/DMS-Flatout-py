@@ -291,7 +291,7 @@ def replicate_read_shortnames_logic(record):
             return result
         else:
             if 'parent' in record and record['parent'] and not(record['parent']['name']=='') and check_is_numeric_or_text_grid(record['parent']):
-                if not re.match(r'^\s*?(\d+)(?:\.0*?)?\s*?$',record['properties']['shortname']):
+                if 'shortname' not in record['properties'] or not re.match(r'^\s*?(\d+)(?:\.0*?)?\s*?$',record['properties']['shortname']):
                     raise AAFailedFindShortnameException('Failed to find shortname: {s}'.format(s=record['name']))
                 result_part1 = trim(record['parent']['properties']['shortname'])
                 result_part2 = trim(sanitize_numeric_short_name_with_z3(trim(record['properties']['shortname'])))

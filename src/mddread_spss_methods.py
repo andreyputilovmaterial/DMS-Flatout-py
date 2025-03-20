@@ -174,7 +174,7 @@ def find_final_short_name_fallback(variable_record):
     is_bad_name = False
     is_bad_name = is_bad_name or not field_prop_shortname
     is_bad_name = is_bad_name or check_if_improper_name(field_prop_shortname)
-    already_used = field_prop_shortname in [ (f['properties']['shortname'] if 'shortname' in f['properties'] else '') for _,f in siblings ]
+    already_used = field_prop_shortname in [ (f['properties']['shortname'] if 'shortname' in f['properties'] else '') for f in siblings ]
     is_bad_name = is_bad_name or already_used
 
     if is_bad_name:
