@@ -301,7 +301,11 @@ def replicate_read_shortnames_logic(record):
                     raise AAFailedFindShortnameException('Failed to find shortname: {s}'.format(s=record['name']))
                 return '{p1}{add}{p2}'.format(p1=result_part1,p2=result_part2,add='<@>_')
             elif 'parent' in record and record['parent'] and not(record['parent']['name']=='') and check_is_categorical_grid(record['parent']):
-                result = trim(record['parent']['properties']['shortname'])
+                result = None
+                try:
+                    result = trim(record['parent']['properties']['shortname'])
+                except KeyError:
+                    pass
                 if not result:
                     raise AAFailedFindShortnameException('Failed to find shortname: {s}'.format(s=record['name']))
                 return result
