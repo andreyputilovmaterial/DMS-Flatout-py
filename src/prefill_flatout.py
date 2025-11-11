@@ -1,5 +1,7 @@
 
 
+import sys # for error reporting
+
 
 
 if __name__ == '__main__':
@@ -117,83 +119,99 @@ def prefill(xls, flatout_data, variable_records):
     variables_df = xls.parse(sheet_name='variables', header=2, keep_default_na=False).fillna('')
     columns_upd = detect_columns_upd_variables_df(variables_df)
     for row in variables_df.index:
-        name_in_flatout_map = variables_df.loc[row,'Variable']
-        if name_in_flatout_map in prefill_flatout_template.CONFIG_KNOWN_SYSTEM_FIELDS:
-            variable_spss_prefilled_properties = prefill_flatout_template.CONFIG_KNOWN_SYSTEM_FIELDS[name_in_flatout_map]
-        else:
-            variable_spss_prefilled_properties = lookup_variable_in_variable_records(name_in_flatout_map,variable_records,flatout_data)
-        if 'include' in variable_spss_prefilled_properties:
-            variables_df.loc[row,columns_upd['include']] = variable_spss_prefilled_properties['include']
-        else:
-            # keep default value from original flatout map
-            pass
-        # if 'exclude' in variable_spss_prefilled_properties:
-        #     variables_df.loc[row,columns_upd['exclude']] = variable_spss_prefilled_properties['exclude']
-        # else:
-        #     # keep default value from original flatout map
-        #     pass
-        if 'shortname' in variable_spss_prefilled_properties:
-            variables_df.loc[row,columns_upd['shortname']] = variable_spss_prefilled_properties['shortname']
-        else:
-            # keep default value from original flatout map
-            pass
-        if 'label' in variable_spss_prefilled_properties:
-            variables_df.loc[row,columns_upd['label']] = variable_spss_prefilled_properties['label']
-        else:
-            # keep default value from original flatout map
-            pass
-        if 'format' in variable_spss_prefilled_properties:
-            variables_df.loc[row,columns_upd['format']] = variable_spss_prefilled_properties['format']
-        else:
-            # keep default value from original flatout map
-            pass
-        if 'markup' in variable_spss_prefilled_properties:
-            variables_df.loc[row,columns_upd['markup']] = variable_spss_prefilled_properties['markup']
-        else:
-            # keep default value from original flatout map
-            pass
-        if 'comment' in variable_spss_prefilled_properties and variable_spss_prefilled_properties['comment']:
-            variables_df.loc[row,columns_upd['comment']] = '>>>>>>>>' + ' ' + variable_spss_prefilled_properties['comment']
-        else:
-            # keep default value from original flatout map
-            pass
+        try:
+            name_in_flatout_map = variables_df.loc[row,'Variable']
+            try:
+                if name_in_flatout_map in prefill_flatout_template.CONFIG_KNOWN_SYSTEM_FIELDS:
+                    variable_spss_prefilled_properties = prefill_flatout_template.CONFIG_KNOWN_SYSTEM_FIELDS[name_in_flatout_map]
+                else:
+                    variable_spss_prefilled_properties = lookup_variable_in_variable_records(name_in_flatout_map,variable_records,flatout_data)
+                if 'include' in variable_spss_prefilled_properties:
+                    variables_df.loc[row,columns_upd['include']] = variable_spss_prefilled_properties['include']
+                else:
+                    # keep default value from original flatout map
+                    pass
+                # if 'exclude' in variable_spss_prefilled_properties:
+                #     variables_df.loc[row,columns_upd['exclude']] = variable_spss_prefilled_properties['exclude']
+                # else:
+                #     # keep default value from original flatout map
+                #     pass
+                if 'shortname' in variable_spss_prefilled_properties:
+                    variables_df.loc[row,columns_upd['shortname']] = variable_spss_prefilled_properties['shortname']
+                else:
+                    # keep default value from original flatout map
+                    pass
+                if 'label' in variable_spss_prefilled_properties:
+                    variables_df.loc[row,columns_upd['label']] = variable_spss_prefilled_properties['label']
+                else:
+                    # keep default value from original flatout map
+                    pass
+                if 'format' in variable_spss_prefilled_properties:
+                    variables_df.loc[row,columns_upd['format']] = variable_spss_prefilled_properties['format']
+                else:
+                    # keep default value from original flatout map
+                    pass
+                if 'markup' in variable_spss_prefilled_properties:
+                    variables_df.loc[row,columns_upd['markup']] = variable_spss_prefilled_properties['markup']
+                else:
+                    # keep default value from original flatout map
+                    pass
+                if 'comment' in variable_spss_prefilled_properties and variable_spss_prefilled_properties['comment']:
+                    variables_df.loc[row,columns_upd['comment']] = '>>>>>>>>' + ' ' + variable_spss_prefilled_properties['comment']
+                else:
+                    # keep default value from original flatout map
+                    pass
+            except Exception as e:
+                print('Failed when processing variable {s}'.format(s=name_in_flatout_map),file=sys.stderr)
+                raise e
+        except Exception as e:
+            print('Failed when processing row {s}'.format(s=row),file=sys.stderr)
+            raise e
         
     categories_df = xls.parse(sheet_name='cats by vars', header=2, keep_default_na=False).fillna('')
     columns_upd = detect_columns_upd_categories_df(categories_df)
     for row in categories_df.index:
-        name_variable_in_flatout_map = categories_df.loc[row,'Variable']
-        name_category_in_flatout_map = categories_df.loc[row,'Category']
-        category_spss_prefilled_properties = lookup_category_in_variable_records(name_variable_in_flatout_map,name_category_in_flatout_map,variable_records,flatout_data)
-        if 'include' in category_spss_prefilled_properties:
-            categories_df.loc[row,columns_upd['include']] = category_spss_prefilled_properties['include']
-        else:
-            # keep default value from original flatout map
-            pass
-        if 'exclude' in category_spss_prefilled_properties:
-            categories_df.loc[row,columns_upd['exclude']] = category_spss_prefilled_properties['exclude']
-        else:
-            # keep default value from original flatout map
-            pass
-        if 'value' in category_spss_prefilled_properties:
-            categories_df.loc[row,columns_upd['value']] = category_spss_prefilled_properties['value']
-        else:
-            # keep default value from original flatout map
-            pass
-        if 'label' in category_spss_prefilled_properties:
-            categories_df.loc[row,columns_upd['label']] = category_spss_prefilled_properties['label']
-        else:
-            # keep default value from original flatout map
-            pass
-        if 'markup' in category_spss_prefilled_properties:
-            categories_df.loc[row,columns_upd['markup']] = category_spss_prefilled_properties['markup']
-        else:
-            # keep default value from original flatout map
-            pass
-        if 'comment' in category_spss_prefilled_properties and category_spss_prefilled_properties['comment']:
-            categories_df.loc[row,columns_upd['comment']] = '>>>>>>>>' + ' ' + category_spss_prefilled_properties['comment']
-        else:
-            # keep default value from original flatout map
-            pass
+        try:
+            name_variable_in_flatout_map = categories_df.loc[row,'Variable']
+            name_category_in_flatout_map = categories_df.loc[row,'Category']
+            try:
+                category_spss_prefilled_properties = lookup_category_in_variable_records(name_variable_in_flatout_map,name_category_in_flatout_map,variable_records,flatout_data)
+                if 'include' in category_spss_prefilled_properties:
+                    categories_df.loc[row,columns_upd['include']] = category_spss_prefilled_properties['include']
+                else:
+                    # keep default value from original flatout map
+                    pass
+                if 'exclude' in category_spss_prefilled_properties:
+                    categories_df.loc[row,columns_upd['exclude']] = category_spss_prefilled_properties['exclude']
+                else:
+                    # keep default value from original flatout map
+                    pass
+                if 'value' in category_spss_prefilled_properties:
+                    categories_df.loc[row,columns_upd['value']] = category_spss_prefilled_properties['value']
+                else:
+                    # keep default value from original flatout map
+                    pass
+                if 'label' in category_spss_prefilled_properties:
+                    categories_df.loc[row,columns_upd['label']] = category_spss_prefilled_properties['label']
+                else:
+                    # keep default value from original flatout map
+                    pass
+                if 'markup' in category_spss_prefilled_properties:
+                    categories_df.loc[row,columns_upd['markup']] = category_spss_prefilled_properties['markup']
+                else:
+                    # keep default value from original flatout map
+                    pass
+                if 'comment' in category_spss_prefilled_properties and category_spss_prefilled_properties['comment']:
+                    categories_df.loc[row,columns_upd['comment']] = '>>>>>>>>' + ' ' + category_spss_prefilled_properties['comment']
+                else:
+                    # keep default value from original flatout map
+                    pass
+            except Exception as e:
+                print('Failed when processing category {s1}.{s2}'.format(s1=name_variable_in_flatout_map,s2=name_category_in_flatout_map),file=sys.stderr)
+                raise e
+        except Exception as e:
+            print('Failed when processing row {s}'.format(s=row),file=sys.stderr)
+            raise e
     
     return variables_df, categories_df
 

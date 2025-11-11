@@ -3,6 +3,7 @@ import argparse
 from pathlib import Path
 import json
 import pandas as pd
+import sys # for error reporting
 
 
 
@@ -119,7 +120,16 @@ def entry_point(runscript_config={}):
     variable_records['']['extend_methods']['update_levels']() # start from root, which is at ['']
     print('Reading SPSS properties...')
     for _, record in variable_records.items():
-        record['extend_methods']['update_spss_properties']()
+        try:
+            record['extend_methods']['update_spss_properties']()
+        except Exception as e:
+            try:
+                print('Failed when processing variable {s}'.format(s=record['name']),file=sys.stderr)
+            except:
+                # fallback
+                print('Failed when processing variable {s}'.format(s='{s}'.format(s=record)[:31]),file=sys.stderr)
+                pass
+            raise e
 
     print('Reading flatout map "{file}"...'.format(file=inp_map_filename))
     xls = pd.ExcelFile(inp_map_filename,engine='openpyxl')
